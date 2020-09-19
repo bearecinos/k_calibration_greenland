@@ -1,0 +1,9 @@
+/input_data
+/output_data
+/plots
+/dev_notebooks
+/.idea
+__pycache__/
+*.pyd
+*.pyc
+*.pyo
