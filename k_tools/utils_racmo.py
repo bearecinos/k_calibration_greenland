@@ -1,35 +1,25 @@
-#  Tools to procress with RACMO
+#  Tools to process RACMO data
 import pandas as pd
 import numpy as np
 import logging
-import geopandas as gpd
-import math
 import os
 import pyproj
-import pickle
 import xarray as xr
-import rasterio
-import matplotlib.colors as colors
-import salem
-from affine import Affine
-from salem import wgs84
-from shapely.ops import transform as shp_trafo
-from functools import partial, wraps
-from collections import OrderedDict
-from oggm import cfg, entity_task, workflow
-from oggm.utils._workflow import ncDataset, _get_centerline_lonlat
+from oggm import cfg
+from oggm.utils._workflow import ncDataset
 
 # Module logger
 log = logging.getLogger(__name__)
 
 
 def calving_flux_km3yr(gdir, smb):
-    """Calving mass-loss from specific MB equivalent.
-    to Km^3/yr. This is necessary to use RACMO to find k values.
+    """
+    Converts SMB (in MB equivalent) to a frontal ablation flux (in Km^3/yr).
+    This is necessary to find k values with RACMO data.
     :param
     gdir: Glacier Directory
     smb: Surface Mass balance from RACMO in  mm. w.e a-1
-    :returns
+    :return
     q_calving: smb converted to calving flux
     """
     if not gdir.is_tidewater:
@@ -45,14 +35,13 @@ def open_racmo(netcdf_path, netcdf_mask_path=None):
     """Opens a netcdf from RACMO with a format PROJ (x, y, projection)
     and DATUM (lon, lat, time)
 
-     Parameters:
-    ------------
+    :param
     netcdf_path: path to the data
-    netcdf_mask_path: Must be given when openning SMB data else needs to be
+    netcdf_mask_path: Must be given when opening SMB data else needs to be
     None.
     :returns
         out: xarray object with projection and coordinates in order
-     """
+    """
 
     # RACMO open varaible file
     ds = xr.open_dataset(netcdf_path, decode_times=False)
@@ -89,14 +78,12 @@ def open_racmo(netcdf_path, netcdf_mask_path=None):
 
 def crop_racmo_to_glacier_grid(gdir, ds):
     """ Crops the RACMO data to the glacier grid
-
-    Parameters
-    -----------
-    gdir: :py:class:`oggm.GlacierDirectory`
-        the glacier directory to process
+    :param
+    gdir: `oggm.GlacierDirectory`
     ds: xarray object
     :returns
-        ds_sel_roi: xarray with the data cropt to the glacier outline """
+        ds_sel_roi: xarray with the data cropped to the glacier outline
+    """
     try:
         ds_sel = ds.salem.subset(grid=gdir.grid, margin=2)
     except ValueError:
@@ -111,40 +98,41 @@ def crop_racmo_to_glacier_grid(gdir, ds):
     return ds_sel_roi
 
 
-def get_racmo_time_series(ds_sel_roi, var_name,
-                          dim_one, dim_two, dim_three,
+def get_racmo_time_series(ds_sel_roi,
+                          var_name,
+                          dim_one,
+                          dim_two,
+                          dim_three,
                           time_start=None, time_end=None):
-    """ Generates RACMO time series for a 31 year period centered
-    in a t-star year, with the data already cropped to the glacier outline
-    Parameters
-    ------------
+    """ Generates RACMO time series for a time period
+     with the data already cropped to the glacier outline.
+
+    :param
     ds_sel_roi: xarray obj already cropped to the glacier outline
-    var_name: ndarray the variable name to extract the time series
+    var_name: the variable name to extract the time series from
     dim_one : 'x' or 'lon'
     dim_two: 'y' or 'lat'
     dim_three: 'time'
-    time_start: a year where the RACMO time series should begin
-    time_end: a year where the RACMO time series should end
+    time_start: a time where the RACMO time series should begin
+    time_end: a time where the RACMO time series should end
 
     :returns
-    ts_31yr: xarray object with a time series of the RACMO variable, monthly
-    data for a 31 reference period according to X. Fettweis et al. 2017 and
-    Eric Rignot and Pannir Kanagaratnam, 2006.
+    ts_31: xarray object with a time series of the RACMO variable, monthly
+    data for a reference period.
     """
     if ds_sel_roi is None:
         ts_31 = None
     elif ds_sel_roi[var_name].isnull().all():
-        #print('the glacier has no RACMO data')
         ts_31 = None
     else:
         ts = ds_sel_roi[var_name].mean(dim=[dim_one, dim_two],
-                        skipna=True).resample(time='AS').mean(dim=dim_three,
-                                                              skipna=True)
+                                       skipna=True).resample(time='AS').mean(dim=dim_three,
+                                                                             skipna=True)
 
         if time_start is None:
             ts_31 = ts
         else:
-            ts_31 = ts.sel(time=slice(str(time_start), str(time_end)))
+            ts_31 = ts.sel(time=slice(time_start, time_end))
 
     return ts_31
 
@@ -154,21 +142,19 @@ def get_racmo_std_from_moving_avg(ds_sel_roi,
                                   dim_one,
                                   dim_two):
     """ Generates RACMO time series for yearly averages and computes
-    the glaciers std for RACMO smb.
-    Parameters
-    ------------
+    the std of the variable to analyse.
+    :param
     ds_sel_roi: xarray obj already cropped to the glacier outline
-    var_name: ndarray the variable name to extract the time series
+    var_name: the variable name to extract the time series from the given
+    array
     dim_one : 'x' or 'lon'
     dim_two: 'y' or 'lat'
-
     :returns
-    std: standard deviation of smb data cropped to the glacier outline
+    std: standard deviation of the variable cropped to the glacier outline
     """
     if ds_sel_roi is None:
         std = None
     elif ds_sel_roi[var_name].isnull().all():
-        #print('the glacier has no RACMO data')
         std = None
     else:
         ts = ds_sel_roi[var_name].mean(dim=[dim_one, dim_two], skipna=True)
@@ -179,27 +165,29 @@ def get_racmo_std_from_moving_avg(ds_sel_roi,
     return std
 
 
-def process_racmo_data(gdir, racmo_path,
+def process_racmo_data(gdir,
+                       racmo_path,
                        time_start=None, time_end=None):
-    """Processes and writes RACMO data in each glacier directory.
+    """Processes and writes RACMO data in each glacier directory. Computing
+    time series of the data for a reference period
 
-    Parameters
-    ----------
-    gdir : :py:class:`oggm.GlacierDirectory`
-        the glacier directory to process
-    racmo_path: the main path to the RACMO data
+    :param
+    gdir `oggm.GlacierDirectory`
+    racmo_path: the main path to the RACMO data (see config.ini)
+    time_start: a time where the RACMO time series should begin ('1961-01-01')
+    time_end: a time where the RACMO time series should end ('1990-12-01')
 
     :returns
     writes an nc file in each glacier directory with the RACMO data
-    time series of SMB, precipitation, run off and melt for a 31 reference
-    period according to X. Fettweis et al. 2017,
-     Eric Rignot and Pannir Kanagaratnam, 2006.
+    time series of SMB, precipitation, run off and melt for any reference
+    period.
     """
+
     mask_file = os.path.join(racmo_path,
                              'Icemask_Topo_Iceclasses_lon_lat_average_1km.nc')
 
     smb_file = os.path.join(racmo_path,
-                    'smb_rec.1958-2018.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc')
+                        'smb_rec.1958-2018.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc')
 
     prcp_file = os.path.join(racmo_path,
                         'precip.1958-2018.BN_RACMO2.3p2_FGRN055_GrIS.MM.nc')
@@ -331,15 +319,14 @@ def process_racmo_data(gdir, racmo_path,
 
 
 def get_smb31_from_glacier(gdir):
-    """ Reads RACMO data and takes a mean over 31 year period of the
-        surface mass balance
-
-    Parameters
-    ------------
-    gdir : :py:class:`oggm.GlacierDirectory`
-        the glacier directory to process
-    :returns
-    smb_31 mean value in km^3/yr
+    """ Reads RACMO data and takes a mean over a reference period for the
+        surface mass balance and adds an uncertainty based on the std
+        over the entire data period.
+    :param
+    gdir: `oggm.GlacierDirectory`
+    :return
+    out_dic: a dictionary with averages and cumulative estimates of smb in
+    original units and in frontal ablation units. It also includes uncertainty.
     """
     fpath = gdir.dir + '/racmo_data.nc'
 
@@ -371,29 +358,27 @@ def get_smb31_from_glacier(gdir):
         smb_calving_std = None
         smb_calving_cum = None
 
-    out_dic = dict(smb_mean = smb_mean,
-                   smb_std = smb_std,
-                   smb_cum = smb_cum,
-                   smb_calving_mean = smb_calving_mean,
-                   smb_calving_std = smb_calving_std,
-                   smb_calving_cum = smb_calving_cum)
+    out_dic = dict(smb_mean=smb_mean,
+                   smb_std=smb_std,
+                   smb_cum=smb_cum,
+                   smb_calving_mean=smb_calving_mean,
+                   smb_calving_std=smb_calving_std,
+                   smb_calving_cum=smb_calving_cum)
 
     return out_dic
 
 
 def get_mu_star_from_glacier(gdir):
     """ Reads RACMO data and calculates the mean temperature sensitivity
-    from RACMO SMB data and snow melt estimates. In a glacier wide average and
-    a mean value of the entire RACMO time series. Based on the method described
-    in Oerlemans, J., and Reichert, B. (2000).
+    from RACMO SMB data and snow melt estimates.
+    In a glacier wide average and a mean value of the entire RACMO time series.
+    Based on the method described in Oerlemans, J., and Reichert, B. (2000).
+    :param
+    gdir: `oggm.GlacierDirectory`
+    :return
+    mean_mu: Mu_star from RACMO, mean value in mm.w.e /K-1
+    """
 
-        Parameters
-        ------------
-        gdir : :py:class:`oggm.GlacierDirectory`
-            the glacier directory to process
-        :returns
-        Mu_star_racmo mean value in mm.w.e /K-1
-        """
     fpath = gdir.dir + '/racmo_data.nc'
 
     if os.path.exists(fpath):
@@ -412,8 +397,7 @@ def get_mu_star_from_glacier(gdir):
 
 # TODO: this function needs a lot of work still! we need to be able to tell
 # the code what to do with different outcomes
-def k_calibration_with_racmo(df_oggm,
-                             df_racmo):
+def k_calibration_with_racmo(df_oggm, df_racmo):
 
     rtol = df_racmo['q_calving_RACMO_mean_std'] / df_racmo['q_calving_RACMO_mean']
     racmo_flux = df_racmo['q_calving_RACMO_mean'].values
@@ -491,72 +475,3 @@ def k_calibration_with_racmo(df_oggm,
                    message=message)
 
     return out_dic
-
-
-def calculate_PDM(gdir):
-    """Calculates the Positive degree month sum; is the total sum,
-    of monthly averages temperatures above 0°C in a 31 yr period
-    centered in t_star year and with a reference height at the free board.
-
-    Parameters
-    ----------
-    gidr : Glacier directory
-    """
-    # First we get the years to analise
-    # Parameters
-    temp_all_solid = cfg.PARAMS['temp_all_solid']
-    temp_all_liq = cfg.PARAMS['temp_all_liq']
-    temp_melt = cfg.PARAMS['temp_melt']
-    prcp_fac = cfg.PARAMS['prcp_scaling_factor']
-    default_grad = cfg.PARAMS['temp_default_gradient']
-
-    df = gdir.read_json('local_mustar')
-    tstar = df['t_star']
-    mu_hp = int(cfg.PARAMS['mu_star_halfperiod'])
-    # Year range
-    yr = [tstar - mu_hp, tstar + mu_hp]
-
-    #Then the heights
-    heights = gdir.get_inversion_flowline_hw()[0]
-
-    #Then the climate data
-    ds = xr.open_dataset(gdir.get_filepath('climate_monthly'))
-    # We only select the years tha we need
-    new_ds = ds.sel(time=slice(str(yr[0])+'-01-01',
-                               str(yr[1])+'-12-31'))
-    # we make it a data frame
-    df = new_ds.to_dataframe()
-
-    # We create the new matrix
-    igrad = df.temp * 0 + cfg.PARAMS['temp_default_gradient']
-    iprcp = df.prcp
-    iprcp *= prcp_fac
-
-    npix = len(heights)
-
-    # We now estimate the temperature gradient
-    grad_temp = np.atleast_2d(igrad).repeat(npix, 0)
-    grad_temp *= (heights.repeat(len(df.index)).reshape(
-        grad_temp.shape) - new_ds.ref_hgt)
-    temp2d = np.atleast_2d(df.temp).repeat(npix, 0) + grad_temp
-
-    # Precipitation
-    prcpsol = np.atleast_2d(iprcp).repeat(npix, 0)
-    fac = 1 - (temp2d - temp_all_solid) / (temp_all_liq - temp_all_solid)
-    fac = np.clip(fac, 0, 1)
-    prcpsol = prcpsol * fac
-
-    data_temp = pd.DataFrame(temp2d,
-                             columns=[df.index],
-                             index=heights)
-    data_prcp = pd.DataFrame(prcpsol,
-                             columns=[df.index],
-                             index=heights)
-
-    temp_free_board = data_temp.iloc[-1]
-    solid_prcp_top = data_prcp.iloc[0].sum()
-
-    PDM_temp = temp_free_board[temp_free_board > 0].sum()
-    PDM_number = temp_free_board[temp_free_board > 0].count()
-
-    return PDM_temp, PDM_number, solid_prcp_top

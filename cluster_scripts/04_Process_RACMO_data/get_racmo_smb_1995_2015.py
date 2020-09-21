@@ -1,8 +1,8 @@
-# This will run OGGM and obtain velocity data from the MEaSUREs Multi-year
-# Greenland Ice Sheet Velocity Mosaic, Version 1.
-# It will give you velocity averages along the main centrelines
-# with the respective uncertainty from the MEaSUREs tiff files
-# Python imports
+# This will run OGGM and obtain surface mass balance means from RACMO
+# over a reference period
+# time_start = '1995-10-01'
+# time_end = '2015-09-31'
+# This will be use to calibrate the k parameter in Greenland
 from __future__ import division
 import os
 import sys
@@ -11,12 +11,14 @@ import geopandas as gpd
 import pandas as pd
 from configobj import ConfigObj
 import time
+
 # Imports oggm
 import oggm.cfg as cfg
 from oggm import workflow
 from oggm import tasks
 from oggm.workflow import execute_entity_task
 from oggm import utils
+
 # Module logger
 import logging
 log = logging.getLogger(__name__)
@@ -26,17 +28,17 @@ start = time.time()
 MAIN_PATH = os.path.expanduser('~/k_calibration_greenland/')
 sys.path.append(MAIN_PATH)
 
-config = ConfigObj(os.path.join(MAIN_PATH,'config.ini'))
+config = ConfigObj(os.path.join(MAIN_PATH, 'config.ini'))
 
-# velocity module
-from k_tools import utils_velocity as utils_vel
-from k_tools import misc
+# misc and racmo modules
+from k_tools import utils_racmo as utils_racmo
 
-# Regions: Greenland
+# Region Greenland
 rgi_region = '05'
 
 # Initialize OGGM and set up the run parameters
 # ---------------------------------------------
+
 cfg.initialize()
 rgi_version = '61'
 
@@ -63,6 +65,9 @@ cfg.PARAMS['compress_climate_netcdf'] = False
 # We use intersects
 path = utils.get_rgi_intersects_region_file(rgi_region, version=rgi_version)
 cfg.set_intersects_db(path)
+
+# RACMO data path
+racmo_path = os.path.join(MAIN_PATH, config['racmo_path'])
 
 # RGI file
 rgidf = gpd.read_file(os.path.join(MAIN_PATH, config['RGI_FILE']))
@@ -100,7 +105,6 @@ ids = de.RGIId.values
 keep_errors = [(i not in ids) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_errors]
 
-# print(len(rgidf))
 # Run a single id for testing
 # glacier = ['RGI60-05.00304', 'RGI60-05.08443']
 # keep_indexes = [(i in glacier) for i in rgidf.RGIId]
@@ -118,83 +122,63 @@ gdirs = workflow.init_glacier_regions(rgidf)
 
 execute_entity_task(tasks.glacier_masks, gdirs)
 
-# Prepro tasks
-task_list = [
-    tasks.compute_centerlines,
-    tasks.initialize_flowlines,
-    tasks.catchment_area,
-    tasks.catchment_intersections,
-    tasks.catchment_width_geom,
-    tasks.catchment_width_correction,
-]
-for task in task_list:
-    execute_entity_task(task, gdirs)
-
 # Log
 m, s = divmod(time.time() - start, 60)
 h, m = divmod(m, 60)
-log.info("OGGM preprocessing finished! Time needed: %02d:%02d:%02d" %
+log.info("OGGM dirs finished! Time needed: %02d:%02d:%02d" %
          (h, m, s))
 
 ids = []
-vel_fls_avg = []
-err_fls_avg = []
-vel_calving_front = []
-err_calving_front = []
-rel_tol_fls = []
-rel_tol_calving_front = []
-length_fls = []
+smb_avg = []
+smb_std = []
+smb_cum = []
+racmo_calving_avg = []
+racmo_calving_avg_std = []
+racmo_calving_cum = []
 
 files_no_data = []
 
-dvel = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['vel_path']))
-derr = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['error_vel_path']))
+time_start = '1995-10-01'
+time_end = '2015-09-31'
 
 for gdir in gdirs:
 
-    # first we compute the centerlines as shapefile to crop the satellite
-    # data
-    misc.write_flowlines_to_shape(gdir, path=gdir.dir)
-    shp_path = os.path.join(gdir.dir, 'RGI60-05.shp')
-    shp = gpd.read_file(shp_path)
+    utils_racmo.process_racmo_data(gdir,
+                                   racmo_path,
+                                   time_start=time_start,
+                                   time_end=time_end)
 
-    # we crop the satellite data to the centerline shape file
-    dvel_fls, derr_fls = utils_vel.crop_vel_data_to_flowline(dvel, derr, shp)
+    # We compute a calving flux from RACMO data
+    out = utils_racmo.get_smb31_from_glacier(gdir)
 
-    out = utils_vel.calculate_observation_vel_at_the_main_flowline(gdir,
-                                                                   dvel_fls,
-                                                                   derr_fls)
-
-    if np.any(out[2]):
-        ids = np.append(ids, gdir.rgi_id)
-        vel_fls_avg = np.append(vel_fls_avg, out[0])
-        err_fls_avg = np.append(err_fls_avg, out[1])
-
-        rel_tol_fls = np.append(rel_tol_fls,
-                                np.around((out[1] / out[0]), decimals=2))
-        vel_calving_front = np.append(vel_calving_front, out[2])
-        err_calving_front = np.append(err_calving_front, out[3])
-        rel_tol_calving_front = np.append(rel_tol_calving_front,
-                                          np.around((out[3] / out[2]),
-                                                    decimals=2))
-        length_fls = np.append(length_fls, out[4])
-
-    else:
-        print('There is no velocity data for this glacier')
+    if out['smb_mean'] is None:
+        print('There is no RACMO data for this glacier')
         files_no_data = np.append(files_no_data, gdir.rgi_id)
+    else:
+        # We append everything
+        ids = np.append(ids, gdir.rgi_id)
+        smb_avg = np.append(smb_avg, out['smb_mean'])
+        smb_std = np.append(smb_std, out['smb_std'])
+        smb_cum = np.append(smb_cum, out['smb_cum'])
+        racmo_calving_avg = np.append(racmo_calving_avg,
+                                      out['smb_calving_mean'])
+        racmo_calving_avg_std = np.append(racmo_calving_avg_std,
+                                          out['smb_calving_std'])
+        racmo_calving_cum = np.append(racmo_calving_cum,
+                                      out['smb_calving_cum'])
 
 d = {'RGIId': files_no_data}
 df = pd.DataFrame(data=d)
 
-df.to_csv(cfg.PATHS['working_dir'] + 'glaciers_with_no_velocity_data.csv')
+df.to_csv(cfg.PATHS['working_dir'] + 'glaciers_with_no_racmo_data.csv')
 
 dr = {'RGI_ID': ids,
-      'vel_fls': vel_fls_avg,
-      'error_fls': err_fls_avg,
-      'rel_tol_fls': rel_tol_fls,
-      'vel_calving_front': vel_calving_front,
-      'error_calving_front': err_calving_front,
-      'rel_tol_calving_front': rel_tol_calving_front}
+      'smb_mean': smb_avg,
+      'smb_std': smb_std,
+      'smb_cum': smb_cum,
+      'q_calving_RACMO_mean': racmo_calving_avg,
+      'q_calving_RACMO_mean_std': racmo_calving_avg_std,
+      'q_calving_RACMO_cum': racmo_calving_cum}
 
 df_r = pd.DataFrame(data=dr)
-df_r.to_csv(cfg.PATHS['working_dir'] + '/velocity_observations.csv')
+df_r.to_csv(cfg.PATHS['working_dir']+'racmo_data_'+time_start+time_end+'_.csv')
