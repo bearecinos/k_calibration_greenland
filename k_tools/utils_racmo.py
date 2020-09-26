@@ -103,7 +103,7 @@ def get_racmo_time_series(ds_sel_roi,
                           dim_one,
                           dim_two,
                           dim_three,
-                          time_start=None, time_end=None):
+                          time_start=None, time_end=None, alias=None):
     """ Generates RACMO time series for a time period
      with the data already cropped to the glacier outline.
 
@@ -115,6 +115,7 @@ def get_racmo_time_series(ds_sel_roi,
     dim_three: 'time'
     time_start: a time where the RACMO time series should begin
     time_end: a time where the RACMO time series should end
+    alias: time stamp for the resample
 
     :returns
     ts_31: xarray object with a time series of the RACMO variable, monthly
@@ -125,9 +126,11 @@ def get_racmo_time_series(ds_sel_roi,
     elif ds_sel_roi[var_name].isnull().all():
         ts_31 = None
     else:
-        ts = ds_sel_roi[var_name].mean(dim=[dim_one, dim_two],
-                                       skipna=True).resample(time='AS').mean(dim=dim_three,
-                                                                             skipna=True)
+        t_s = ds_sel_roi[var_name].mean(dim=[dim_one,
+                                            dim_two],
+                                            skipna=True)
+
+        ts = t_s.resample(time=alias).mean(dim=dim_three, skipna=True)
 
         if time_start is None:
             ts_31 = ts
@@ -167,7 +170,7 @@ def get_racmo_std_from_moving_avg(ds_sel_roi,
 
 def process_racmo_data(gdir,
                        racmo_path,
-                       time_start=None, time_end=None):
+                       time_start=None, time_end=None, alias=None):
     """Processes and writes RACMO data in each glacier directory. Computing
     time series of the data for a reference period
 
@@ -176,6 +179,7 @@ def process_racmo_data(gdir,
     racmo_path: the main path to the RACMO data (see config.ini)
     time_start: a time where the RACMO time series should begin ('1961-01-01')
     time_end: a time where the RACMO time series should end ('1990-12-01')
+    alias: string of time stamp for resample e.g AS, M, D
 
     :returns
     writes an nc file in each glacier directory with the RACMO data
@@ -226,7 +230,8 @@ def process_racmo_data(gdir,
                                    dim_one='x',
                                    dim_two='y',
                                    dim_three='time',
-                                   time_start=time_start, time_end=time_end)
+                                   time_start=time_start, time_end=time_end,
+                                   alias=alias)
 
     smb_std = get_racmo_std_from_moving_avg(smb_sel,
                                             var_name='SMB_rec',
@@ -238,28 +243,32 @@ def process_racmo_data(gdir,
                                     dim_one='lon',
                                     dim_two='lat',
                                     dim_three='time',
-                                    time_start=time_start, time_end=time_end)
+                                    time_start=time_start, time_end=time_end,
+                                    alias=alias)
 
     run_off_31 = get_racmo_time_series(run_off_sel,
                                        var_name='runoffcorr',
                                        dim_one='lon',
                                        dim_two='lat',
                                        dim_three='time',
-                                       time_start=time_start, time_end=time_end)
+                                       time_start=time_start, time_end=time_end,
+                                       alias=alias)
 
     melt_31 = get_racmo_time_series(melt_sel,
                                     var_name='snowmeltcorr',
                                     dim_one='lon',
                                     dim_two='lat',
                                     dim_three='time',
-                                    time_start=time_start, time_end=time_end)
+                                    time_start=time_start, time_end=time_end,
+                                    alias=alias)
 
     fall_31 = get_racmo_time_series(fall_sel,
                                     var_name='snowfallcorr',
                                     dim_one='lon',
                                     dim_two='lat',
                                     dim_three='time',
-                                    time_start=time_start, time_end=time_end)
+                                    time_start=time_start, time_end=time_end,
+                                    alias=alias)
 
     fpath = gdir.dir + '/racmo_data.nc'
     if os.path.exists(fpath):

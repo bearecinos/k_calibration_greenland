@@ -139,14 +139,16 @@ racmo_calving_cum = []
 files_no_data = []
 
 time_start = '1995-10-01'
-time_end = '2015-09-31'
+time_end = '2015-10-01'
+alias= 'AS-Oct'
 
 for gdir in gdirs:
 
     utils_racmo.process_racmo_data(gdir,
                                    racmo_path,
                                    time_start=time_start,
-                                   time_end=time_end)
+                                   time_end=time_end,
+                                   alias=alias)
 
     # We compute a calving flux from RACMO data
     out = utils_racmo.get_smb31_from_glacier(gdir)
