@@ -5,6 +5,7 @@ import logging
 import os
 import pyproj
 import xarray as xr
+from collections import defaultdict
 from oggm import cfg
 from oggm.utils._workflow import ncDataset
 
@@ -17,10 +18,10 @@ def calving_flux_km3yr(gdir, smb):
     Converts SMB (in MB equivalent) to a frontal ablation flux (in Km^3/yr).
     This is necessary to find k values with RACMO data.
     :param
-    gdir: Glacier Directory
-    smb: Surface Mass balance from RACMO in  mm. w.e a-1
+        gdir: Glacier Directory
+        smb: Surface Mass balance from RACMO in  mm. w.e a-1
     :return
-    q_calving: smb converted to calving flux
+        q_calving: smb converted to calving flux
     """
     if not gdir.is_tidewater:
         return 0.
@@ -34,16 +35,15 @@ def calving_flux_km3yr(gdir, smb):
 def open_racmo(netcdf_path, netcdf_mask_path=None):
     """Opens a netcdf from RACMO with a format PROJ (x, y, projection)
     and DATUM (lon, lat, time)
-
     :param
-    netcdf_path: path to the data
-    netcdf_mask_path: Must be given when opening SMB data else needs to be
-    None.
-    :returns
+        netcdf_path: path to the data
+        netcdf_mask_path: Must be given when opening SMB data else needs to be
+                          None.
+    :return
         out: xarray object with projection and coordinates in order
     """
 
-    # RACMO open varaible file
+    # RACMO open variable file
     ds = xr.open_dataset(netcdf_path, decode_times=False)
 
     if netcdf_mask_path is not None:
@@ -79,9 +79,9 @@ def open_racmo(netcdf_path, netcdf_mask_path=None):
 def crop_racmo_to_glacier_grid(gdir, ds):
     """ Crops the RACMO data to the glacier grid
     :param
-    gdir: `oggm.GlacierDirectory`
-    ds: xarray object
-    :returns
+        gdir: `oggm.GlacierDirectory`
+        ds: xarray object
+    :return
         ds_sel_roi: xarray with the data cropped to the glacier outline
     """
     try:
@@ -106,20 +106,18 @@ def get_racmo_time_series(ds_sel_roi,
                           time_start=None, time_end=None, alias=None):
     """ Generates RACMO time series for a time period
      with the data already cropped to the glacier outline.
-
     :param
-    ds_sel_roi: xarray obj already cropped to the glacier outline
-    var_name: the variable name to extract the time series from
-    dim_one : 'x' or 'lon'
-    dim_two: 'y' or 'lat'
-    dim_three: 'time'
-    time_start: a time where the RACMO time series should begin
-    time_end: a time where the RACMO time series should end
-    alias: time stamp for the resample
-
-    :returns
-    ts_31: xarray object with a time series of the RACMO variable, monthly
-    data for a reference period.
+        ds_sel_roi: xarray obj already cropped to the glacier outline
+        var_name: the variable name to extract the time series from
+        dim_one : 'x' or 'lon'
+        dim_two: 'y' or 'lat'
+        dim_three: 'time'
+        time_start: a time where the RACMO time series should begin
+        time_end: a time where the RACMO time series should end
+        alias: time stamp for the resample
+    :return
+        ts_31: xarray object with a time series of the RACMO variable, monthly
+        data for a reference period.
     """
     if ds_sel_roi is None:
         ts_31 = None
@@ -147,13 +145,13 @@ def get_racmo_std_from_moving_avg(ds_sel_roi,
     """ Generates RACMO time series for yearly averages and computes
     the std of the variable to analyse.
     :param
-    ds_sel_roi: xarray obj already cropped to the glacier outline
-    var_name: the variable name to extract the time series from the given
-    array
-    dim_one : 'x' or 'lon'
-    dim_two: 'y' or 'lat'
-    :returns
-    std: standard deviation of the variable cropped to the glacier outline
+        ds_sel_roi: xarray obj already cropped to the glacier outline
+        var_name: the variable name to extract the time series from the given
+                    array
+        dim_one : 'x' or 'lon'
+        dim_two: 'y' or 'lat'
+    :return
+        std: standard deviation of the variable cropped to the glacier outline
     """
     if ds_sel_roi is None:
         std = None
@@ -173,18 +171,18 @@ def process_racmo_data(gdir,
                        time_start=None, time_end=None, alias=None):
     """Processes and writes RACMO data in each glacier directory. Computing
     time series of the data for a reference period
-
     :param
-    gdir `oggm.GlacierDirectory`
-    racmo_path: the main path to the RACMO data (see config.ini)
-    time_start: a time where the RACMO time series should begin ('1961-01-01')
-    time_end: a time where the RACMO time series should end ('1990-12-01')
-    alias: string of time stamp for resample e.g AS, M, D
-
-    :returns
-    writes an nc file in each glacier directory with the RACMO data
-    time series of SMB, precipitation, run off and melt for any reference
-    period.
+        gdir: `oggm.GlacierDirectory`
+        racmo_path: the main path to the RACMO data (see config.ini)
+        time_start: a time where the RACMO time series should begin
+                    e.g '1961-01-01'
+        time_end: a time where the RACMO time series should end
+                    e.g '1990-12-01'
+        alias: string of time stamp for resample e.g AS, M, D
+    :return
+        writes an nc file in each glacier directory with the RACMO data
+        time series of SMB, precipitation, run off and melt for any reference
+        period.
     """
 
     mask_file = os.path.join(racmo_path,
@@ -332,10 +330,11 @@ def get_smb31_from_glacier(gdir):
         surface mass balance and adds an uncertainty based on the std
         over the entire data period.
     :param
-    gdir: `oggm.GlacierDirectory`
+        gdir: `oggm.GlacierDirectory`
     :return
-    out_dic: a dictionary with averages and cumulative estimates of smb in
-    original units and in frontal ablation units. It also includes uncertainty.
+        out_dic: a dictionary with averages and cumulative estimates of smb in
+                 original units and in frontal ablation units.
+                 It also includes uncertainty.
     """
     fpath = gdir.dir + '/racmo_data.nc'
 
@@ -383,9 +382,9 @@ def get_mu_star_from_glacier(gdir):
     In a glacier wide average and a mean value of the entire RACMO time series.
     Based on the method described in Oerlemans, J., and Reichert, B. (2000).
     :param
-    gdir: `oggm.GlacierDirectory`
+        gdir: `oggm.GlacierDirectory`
     :return
-    mean_mu: Mu_star from RACMO, mean value in mm.w.e /K-1
+        mean_mu: Mu_star from RACMO, mean value in mm.w.e /K-1
     """
 
     fpath = gdir.dir + '/racmo_data.nc'
@@ -404,83 +403,82 @@ def get_mu_star_from_glacier(gdir):
     return mean_mu
 
 
-# TODO: this function needs a lot of work still! we need to be able to tell
-# the code what to do with different outcomes
-def k_calibration_with_racmo(df_oggm, df_racmo):
+def find_k_values_within_racmo_range(df_oggm, df_racmo):
+    """
+    Finds all k values and OGGM velocity data that is within range of the
+    velocity observation and its error. In the case that no OGGM vel is within
+    range flags if OGGM overestimates or underestimates velocities.
+    :param
+        df_oggm: OGGM data from k sensitivity experiment
+        df_racmo: observations from MEaSUREs v.1.0
+    :return
+        out: dictionary with the OGGM data frame crop to observations values or
+             with a flag in case there is over estimation or under estimation
+    """
 
-    rtol = df_racmo['q_calving_RACMO_mean_std'] / df_racmo['q_calving_RACMO_mean']
-    racmo_flux = df_racmo['q_calving_RACMO_mean'].values
-    racmo_flux_std = df_racmo['q_calving_RACMO_mean_std'].values
+    fa_racmo = df_racmo.q_calving_RACMO_mean.values
+    error_racmo = df_racmo.q_calving_RACMO_mean_std.values
+    r_tol = error_racmo / fa_racmo
 
-    if rtol is None:
-        tol = 0.001
-    else:
-        tol = rtol
+    first_oggm_value = df_oggm.iloc[0].calving_flux
+    last_oggm_value = df_oggm.iloc[-1].calving_flux
 
-    if racmo_flux-racmo_flux_std <= 0:
-        k_value = 0
-        mu_star = 0
-        u_cross = 0
-        u_surf = 0
-        calving_flux = 0
-        racmo_flux = racmo_flux
-        racmo_flux_std = racmo_flux_std
-        rtol = tol
-    else:
-        oggm_values = df_oggm['calving_flux'].values
+    # Our first conditions is for glaciers that have a racmo flux from a
+    # negative range to a positive range.
+    # We can use positive racmo values to calibrate OGGM but we have to care
+    # about mu_star to dont over do it!
+    if (fa_racmo - error_racmo <= 0) and (fa_racmo + error_racmo > 0):
+        low_lim = 0
+        up_lim = fa_racmo + error_racmo
 
-        if oggm_values[0] > racmo_flux+racmo_flux_std:
-            index = 0
-            df_oggm_new = df_oggm.loc[index]
-            k_value = df_oggm_new['k_values']
-            mu_star = df_oggm_new['mu_star']
-            u_cross = df_oggm_new['velocity_cross']
-            u_surf = df_oggm_new['velocity_surf']
-            calving_flux = df_oggm_new['calving_flux']
-            racmo_flux = racmo_flux
-            racmo_flux_std = racmo_flux_std
-            rtol = tol
-            message = 'smallest k possible'
-            print(message, df_racmo['RGI_ID'])
-        elif oggm_values[-1] < racmo_flux-racmo_flux_std:
-            index = -1
-            df_oggm_new = df_oggm.loc[index]
-            k_value = df_oggm_new['k_values']
-            mu_star = df_oggm_new['mu_star']
-            u_cross = df_oggm_new['velocity_cross']
-            u_surf = df_oggm_new['velocity_surf']
-            calving_flux = df_oggm_new['calving_flux']
-            racmo_flux = racmo_flux
-            racmo_flux_std = racmo_flux_std
-            rtol = tol
-            message = 'largest k possible'
-            print(message, df_racmo['RGI_ID'])
+        index = df_oggm.index[np.isclose(df_oggm.calving_flux,
+                                         fa_racmo,
+                                         rtol=r_tol, atol=0)].tolist()
+        if not index and (first_oggm_value > up_lim):
+            df_oggm_new = df_oggm.iloc[0]
+            message = 'OGGM overestimates Fa'
         else:
-            index = df_oggm.index[np.isclose(df_oggm['calving_flux'],
-                                             racmo_flux,
-                                             rtol=tol, atol=0)].tolist()
+            df_oggm_new = df_oggm.loc[index]
+            mu_stars = df_oggm_new.mu_star
+            if mu_stars.iloc[-1] == 0:
+                df_oggm_new = df_oggm_new.iloc[-2]
+                message = 'OGGM is within range but ' \
+                          'mu_star does not allows more calving'
+            else:
+                df_oggm_new = df_oggm_new
+                message = 'OGGM is within range'
+    # Some glaciers will always have a postive racmo smb range
+    elif fa_racmo - error_racmo > 0:
+        low_lim = fa_racmo - error_racmo
+        up_lim = fa_racmo + error_racmo
+
+        index = df_oggm.index[np.isclose(df_oggm.calving_flux,
+                                         fa_racmo,
+                                         rtol=r_tol, atol=0)].tolist()
+        if not index and (last_oggm_value < low_lim):
+            df_oggm_new = df_oggm.iloc[-1]
+            message = 'OGGM underestimates Fa'
+        elif not index and (first_oggm_value > up_lim):
+            df_oggm_new = df_oggm.iloc[0]
+            message = 'OGGM overestimates Fa'
+        else:
             # print(index)
             df_oggm_new = df_oggm.loc[index]
+            message = 'OGGM is within range'
+    # And some glaciers will have a RACMO smb + error = negative they should
+    # not have a calving flux!
+    else:
+        assert fa_racmo + error_racmo < 0
+        df_oggm_new = None
+        message = 'This glacier should not calve'
+        low_lim = fa_racmo - error_racmo
+        up_lim = fa_racmo + error_racmo
 
-            k_value = np.mean(df_oggm_new['k_values'])
-            mu_star = np.mean(df_oggm_new['mu_star'])
-            u_cross = np.mean(df_oggm_new['velocity_cross'])
-            u_surf = np.mean(df_oggm_new['velocity_surf'])
-            calving_flux = np.mean(df_oggm_new['calving_flux'])
-            racmo_flux = racmo_flux
-            racmo_flux_std = racmo_flux_std
-            rtol = tol
-            message = 'closest k to racmo data within a tolerance'
-            print(message, df_racmo['RGI_ID'])
+    out = defaultdict(list)
+    out['oggm_racmo'].append(df_oggm_new)
+    out['racmo_message'].append(message)
+    out['obs_racmo'].append(df_racmo)
+    out['low_lim_racmo'].append(low_lim)
+    out['up_lim_racmo'].append(up_lim)
 
-    out_dic = dict(k_value=k_value,
-                   mu_star=mu_star,
-                   u_cross=u_cross,
-                   u_surf=u_surf,
-                   calving_flux=np.around(calving_flux, decimals=5),
-                   racmo_flux=np.around(racmo_flux, decimals=5),
-                   racmo_flux_std=np.around(racmo_flux_std, decimals=5),
-                   rtol=rtol,
-                   message=message)
-
-    return out_dic
+    return out

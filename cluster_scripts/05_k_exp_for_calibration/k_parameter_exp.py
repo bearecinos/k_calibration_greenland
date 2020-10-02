@@ -1,8 +1,6 @@
-# This will run OGGM and obtain velocity data from the MEaSUREs Multi-year
-# Greenland Ice Sheet Velocity Mosaic, Version 1.
-# It will give you velocity averages along the main centrelines
-# with the respective uncertainty from the MEaSUREs tiff files
-# Python imports
+# This will run k x factors experiment only for MT
+# and compute model surface velocity and frontal ablation fluxes
+# per TW glacier in Greenland
 from __future__ import division
 import os
 import sys
@@ -11,12 +9,15 @@ import geopandas as gpd
 import pandas as pd
 from configobj import ConfigObj
 import time
+
 # Imports oggm
 import oggm.cfg as cfg
 from oggm import workflow
 from oggm import tasks
 from oggm.workflow import execute_entity_task
 from oggm import utils
+from oggm.core import inversion
+
 # Module logger
 import logging
 log = logging.getLogger(__name__)
@@ -26,17 +27,17 @@ start = time.time()
 MAIN_PATH = os.path.expanduser('~/k_calibration_greenland/')
 sys.path.append(MAIN_PATH)
 
-config = ConfigObj(os.path.join(MAIN_PATH,'config.ini'))
+config = ConfigObj(os.path.join(MAIN_PATH, 'config.ini'))
 
 # velocity module
 from k_tools import utils_velocity as utils_vel
-from k_tools import misc
 
-# Regions: Greenland
+# Region Greenland
 rgi_region = '05'
 
 # Initialize OGGM and set up the run parameters
 # ---------------------------------------------
+
 cfg.initialize()
 rgi_version = '61'
 
@@ -100,12 +101,6 @@ ids = de.RGIId.values
 keep_errors = [(i not in ids) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_errors]
 
-# print(len(rgidf))
-# Run a single id for testing
-# glacier = ['RGI60-05.00304', 'RGI60-05.08443']
-# keep_indexes = [(i in glacier) for i in rgidf.RGIId]
-# rgidf = rgidf.iloc[keep_indexes]
-
 # Sort for more efficient parallel computing
 rgidf = rgidf.sort_values('Area', ascending=False)
 
@@ -130,69 +125,66 @@ task_list = [
 for task in task_list:
     execute_entity_task(task, gdirs)
 
+# Climate tasks -- we make sure that calving is = 0 for all tidewater
+for gdir in gdirs:
+    gdir.inversion_calving_rate = 0
+
+execute_entity_task(tasks.process_cru_data, gdirs)
+execute_entity_task(tasks.local_t_star, gdirs)
+execute_entity_task(tasks.mu_star_calibration, gdirs)
+
+# Inversion tasks
+execute_entity_task(tasks.prepare_for_inversion, gdirs, add_debug_var=True)
+execute_entity_task(tasks.mass_conservation_inversion, gdirs)
+
 # Log
 m, s = divmod(time.time() - start, 60)
 h, m = divmod(m, 60)
-log.info("OGGM preprocessing finished! Time needed: %02d:%02d:%02d" %
+log.info("OGGM without calving is done! Time needed: %02d:%02d:%02d" %
          (h, m, s))
 
-ids = []
-vel_fls_avg = []
-err_fls_avg = []
-vel_calving_front = []
-err_calving_front = []
-rel_tol_fls = []
-rel_tol_calving_front = []
-length_fls = []
-
-files_no_data = []
-
-dvel = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['vel_path']))
-derr = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['error_vel_path']))
+k_factors = np.arange(0.01, 3.01, 0.01)
 
 for gdir in gdirs:
+    cross = []
+    surface = []
+    flux = []
+    mu_star = []
+    k_used = []
 
-    # first we compute the centerlines as shapefile to crop the satellite
-    # data
-    misc.write_flowlines_to_shape(gdir, path=gdir.dir)
-    shp_path = os.path.join(gdir.dir, 'RGI60-05.shp')
-    shp = gpd.read_file(shp_path)
+    for k in k_factors:
 
-    # we crop the satellite data to the centerline shape file
-    dvel_fls, derr_fls = utils_vel.crop_vel_data_to_flowline(dvel, derr, shp)
+        # Find a calving flux.
+        cfg.PARAMS['k_calving'] = k
+        out = inversion.find_inversion_calving(gdir)
+        if out is None:
+            continue
 
-    out = utils_vel.calculate_observation_vel(gdir, dvel_fls, derr_fls)
+        calving_flux = out['calving_flux']
+        calving_mu_star = out['calving_mu_star']
 
-    if np.any(out[2]):
-        ids = np.append(ids, gdir.rgi_id)
-        vel_fls_avg = np.append(vel_fls_avg, out[0])
-        err_fls_avg = np.append(err_fls_avg, out[1])
+        inversion.compute_velocities(gdir)
 
-        rel_tol_fls = np.append(rel_tol_fls,
-                                np.around((out[1] / out[0]), decimals=2))
-        vel_calving_front = np.append(vel_calving_front, out[2])
-        err_calving_front = np.append(err_calving_front, out[3])
-        rel_tol_calving_front = np.append(rel_tol_calving_front,
-                                          np.around((out[3] / out[2]),
-                                                    decimals=2))
-        length_fls = np.append(length_fls, out[4])
+        vel_out = utils_vel.calculate_model_vel(gdir)
 
-    else:
-        print('There is no velocity data for this glacier')
-        files_no_data = np.append(files_no_data, gdir.rgi_id)
+        vel_surface = vel_out[2]
+        vel_cross = vel_out[3]
 
-d = {'RGIId': files_no_data}
-df = pd.DataFrame(data=d)
+        cross = np.append(cross, vel_cross)
+        surface = np.append(surface, vel_surface)
+        flux = np.append(flux, calving_flux)
+        mu_star = np.append(mu_star, calving_mu_star)
+        k_used = np.append(k_used, k)
 
-df.to_csv(cfg.PATHS['working_dir'] + 'glaciers_with_no_velocity_data.csv')
+        if mu_star[-1] == 0:
+            break
 
-dr = {'RGI_ID': ids,
-      'vel_fls': vel_fls_avg,
-      'error_fls': err_fls_avg,
-      'rel_tol_fls': rel_tol_fls,
-      'vel_calving_front': vel_calving_front,
-      'error_calving_front': err_calving_front,
-      'rel_tol_calving_front': rel_tol_calving_front}
+    d = {'k_values': k_used,
+         'velocity_cross': cross,
+         'velocity_surf': surface,
+         'calving_flux': flux,
+         'mu_star': mu_star}
 
-df_r = pd.DataFrame(data=dr)
-df_r.to_csv(cfg.PATHS['working_dir'] + '/velocity_observations.csv')
+    df = pd.DataFrame(data=d)
+
+    df.to_csv(os.path.join(cfg.PATHS['working_dir'], gdir.rgi_id + '.csv'))
