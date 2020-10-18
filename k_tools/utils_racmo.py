@@ -426,7 +426,7 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
     # Our first conditions is for glaciers that have a racmo flux from a
     # negative range to a positive range.
     # We can use positive racmo values to calibrate OGGM but we have to care
-    # about mu_star to dont over do it!
+    # about mu_star to don't over do it!
     if (fa_racmo - error_racmo <= 0) and (fa_racmo + error_racmo > 0):
         low_lim = 0
         up_lim = fa_racmo + error_racmo
@@ -437,6 +437,11 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
         if not index and (first_oggm_value > up_lim):
             df_oggm_new = df_oggm.iloc[0]
             message = 'OGGM overestimates Fa'
+        elif not index and (first_oggm_value < up_lim):
+            mask = df_oggm['calving_flux'].between(0, up_lim[0])
+            df_oggm_new = df_oggm[mask]
+            message = 'OGGM is within range, lower RACMO bound is negative' \
+                      'but upper is positive and mu_star is positive'
         else:
             df_oggm_new = df_oggm.loc[index]
             mu_stars = df_oggm_new.mu_star
@@ -455,6 +460,7 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
         index = df_oggm.index[np.isclose(df_oggm.calving_flux,
                                          fa_racmo,
                                          rtol=r_tol, atol=0)].tolist()
+
         if not index and (last_oggm_value < low_lim):
             df_oggm_new = df_oggm.iloc[-1]
             message = 'OGGM underestimates Fa'
@@ -475,6 +481,12 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
         up_lim = fa_racmo + error_racmo
 
     out = defaultdict(list)
+    if df_oggm_new is None and message == 'This glacier should not calve':
+        message = message
+    elif df_oggm_new.empty and message != 'This glacier should not calve':
+        message = 'We need to repeat k experiment'
+    else:
+        message = message
     out['oggm_racmo'].append(df_oggm_new)
     out['racmo_message'].append(message)
     out['obs_racmo'].append(df_racmo)

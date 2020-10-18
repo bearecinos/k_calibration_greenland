@@ -9,10 +9,49 @@ from salem import wgs84
 from shapely.ops import transform as shp_trafo
 from functools import partial
 from collections import OrderedDict
+from collections import defaultdict
 from oggm import cfg
+from scipy.stats import linregress
 
 # Module logger
 log = logging.getLogger(__name__)
+
+
+def get_study_area(rgi, main_path, ice_cap_prepro_path):
+    """
+    Get study area sum
+    :param
+    RGI: RGI as a geopandas
+    MAIN_PATH: repository path
+    ice_cap_prepro_path: ice cap pre-processing to get ica cap areas
+    :return
+    study_area: Study area
+    """
+    rgidf = rgi.sort_values('RGIId', ascending=True)
+
+    # Read Areas for the ice-cap computed in OGGM during
+    # the pre-processing runs
+    df_prepro_ic = pd.read_csv(os.path.join(main_path,
+                                            ice_cap_prepro_path))
+    df_prepro_ic = df_prepro_ic.sort_values('rgi_id', ascending=True)
+
+    # Assign an area to the ice cap from OGGM to avoid errors
+    rgidf.loc[rgidf['RGIId'].str.match('RGI60-05.10315'),
+              'Area'] = df_prepro_ic.rgi_area_km2.values
+
+    # Get rgi only for Lake Terminating and Marine Terminating
+    glac_type = [0]
+    keep_glactype = [(i not in glac_type) for i in rgidf.TermType]
+    rgidf = rgidf.iloc[keep_glactype]
+
+    # Get rgi only for glaciers that have a week connection or are
+    # not connected to the ice-sheet
+    connection = [2]
+    keep_connection = [(i not in connection) for i in rgidf.Connect]
+    rgidf = rgidf.iloc[keep_connection]
+
+    study_area = rgidf.Area.sum()
+    return study_area
 
 
 def normalised(value):
