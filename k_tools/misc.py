@@ -295,3 +295,27 @@ def calculate_PDM(gdir):
     PDM_number = temp_free_board[temp_free_board > 0].count()
 
     return PDM_temp, PDM_number, solid_prcp_top
+
+
+def solve_linear_equation(a1, b1, a2, b2):
+    """
+    Solve linear equation
+
+    Parameters
+    ----------
+        a1: Observation slope (either from the
+                lower bound, value, upper bound)
+        b1: Observation intercept. (either from the
+                lower bound, value, upper bound)
+        a2: Linear fit slope to the model data.
+        b2: Linear fit intercept to the model data
+
+    :returns
+        Z: Intercepts (x, y) x will be k and y velocity.
+    """
+
+    A = np.array([[-a1, 1], [-a2, 1]], dtype='float')
+    b = np.array([b1, b2], dtype='float')
+
+    z = np.linalg.solve(A, b)
+    return z

@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 import pyproj
+import pandas as pd
 import rasterio
 import salem
 from affine import Affine
@@ -210,7 +211,7 @@ def find_k_values_within_vel_range(df_oggm, df_vel):
                                      rtol=r_tol,
                                      atol=0)].tolist()
     if not index and (last_oggm_value < low_lim):
-        df_oggm_new = df_oggm.iloc[-1]
+        df_oggm_new = df_oggm
         message = 'OGGM underestimates velocity'
     elif not index and (first_oggm_value > up_lim):
         df_oggm_new = df_oggm.iloc[0]
@@ -224,6 +225,13 @@ def find_k_values_within_vel_range(df_oggm, df_vel):
         else:
             df_oggm_new = df_oggm_new
             message = 'OGGM is within range'
+
+    if isinstance(df_oggm_new, pd.Series):
+        df_oggm_new = df_oggm_new.to_frame().T
+    else:
+        df_oggm_new = df_oggm_new
+
+    df_oggm_new = df_oggm_new.reset_index(drop=True)
 
     out = defaultdict(list)
     out['oggm_vel'].append(df_oggm_new)

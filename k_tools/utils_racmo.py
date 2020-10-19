@@ -462,7 +462,7 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
                                          rtol=r_tol, atol=0)].tolist()
 
         if not index and (last_oggm_value < low_lim):
-            df_oggm_new = df_oggm.iloc[-1]
+            df_oggm_new = df_oggm
             message = 'OGGM underestimates Fa'
         elif not index and (first_oggm_value > up_lim):
             df_oggm_new = df_oggm.iloc[0]
@@ -480,13 +480,22 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
         low_lim = fa_racmo - error_racmo
         up_lim = fa_racmo + error_racmo
 
-    out = defaultdict(list)
+    # Make sure we write a warning if the glacier should not calve in terms
+    # of RACMO smb being negative
     if df_oggm_new is None and message == 'This glacier should not calve':
         message = message
     elif df_oggm_new.empty and message != 'This glacier should not calve':
         message = 'We need to repeat k experiment'
     else:
         message = message
+
+    if isinstance(df_oggm_new, pd.Series):
+        df_oggm_new = df_oggm_new.to_frame().T
+
+    if df_oggm_new is not None:
+        df_oggm_new = df_oggm_new.reset_index(drop=True)
+
+    out = defaultdict(list)
     out['oggm_racmo'].append(df_oggm_new)
     out['racmo_message'].append(message)
     out['obs_racmo'].append(df_racmo)
