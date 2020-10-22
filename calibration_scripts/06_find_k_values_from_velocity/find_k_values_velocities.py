@@ -82,7 +82,7 @@ for j, f in enumerate(filenames):
                                                                       data_obs)
             fp = os.path.join(output_path, rgi_id + '.pkl')
             with open(fp, 'wb') as f:
-                pickle.dump(output, f, protocol=-1)
+                pickle.dump(output[rgi_id], f, protocol=-1)
 
 
 d = {'RGIId': files_no_calving,

@@ -79,12 +79,11 @@ for j, f in enumerate(filenames):
             # Perform the first step calibration and save the output as a
             # pickle file per glacier
             data_racmo = d_racmo.iloc[index]
-            print(rgi_id)
             output[rgi_id] = utils_racmo.find_k_values_within_racmo_range(glacier,
                                                                           data_racmo)
             fp = os.path.join(output_path, rgi_id + '.pkl')
             with open(fp, 'wb') as f:
-                pickle.dump(output, f, protocol=-1)
+                pickle.dump(output[rgi_id], f, protocol=-1)
 
 
 d = {'RGIId': files_no_calving,

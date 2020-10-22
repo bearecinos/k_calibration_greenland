@@ -428,7 +428,7 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
     # We can use positive racmo values to calibrate OGGM but we have to care
     # about mu_star to don't over do it!
     if (fa_racmo - error_racmo <= 0) and (fa_racmo + error_racmo > 0):
-        low_lim = 0
+        low_lim = np.zeros(1)
         up_lim = fa_racmo + error_racmo
 
         index = df_oggm.index[np.isclose(df_oggm.calving_flux,

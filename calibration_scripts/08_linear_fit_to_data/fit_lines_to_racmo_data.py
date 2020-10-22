@@ -56,81 +56,91 @@ for file in filenames:
 
         # Observations slope, intercept. y = ax + b
         # where a is zero and b is the observation
-        obs = g[rgi_id]['obs_racmo'][0].q_calving_RACMO_mean.iloc[0]
-        slope_obs, intercept_obs = [0, obs]
-        slope_lwl, intercept_lwl = [0, g[rgi_id]['low_lim_racmo'][0]]
-        slope_upl, intercept_upl = [0, g[rgi_id]['up_lim_racmo'][0]]
+        obs = g['obs_racmo'][0].q_calving_RACMO_mean.iloc[0]
+        low_bound = g['low_lim_racmo'][0][0]
+        up_bound = g['up_lim_racmo'][0][0]
+
+        # Make sure tha if uncertainty and RACMO value are always zero if
+        # RACMO calving flux estimate is negative.
+        # if so k should be zero.
+        if obs < 0:
+            obs = 0.0
+        if low_bound < 0:
+            low_bound = 0.0
+        if up_bound < 0:
+            up_bound = 0.0
+
+        slope_obs, intercept_obs = [0.0, obs]
+        slope_lwl, intercept_lwl = [0.0, low_bound]
+        slope_upl, intercept_upl = [0.0, up_bound]
 
         # Get linear fit for OGGM model data
-
         # Get the model data from the first calibration step
-        df_oggm = g[rgi_id]['oggm_racmo'][0]
-        warning = g[rgi_id]['racmo_message'][0]
+        df_oggm = g['oggm_racmo'][0]
+        warning = g['racmo_message'][0]
 
         if warning == 'This glacier should not calve':
-            Z_value = [0, 0]
-            Z_lower_bound = [0, 0]
-            Z_upper_bound = [0, 0]
+            Z_value = [0.0, 0.0]
+            Z_lower_bound = [0.0, 0.0]
+            Z_upper_bound = [0.0, 0.0]
         else:
             # If there is only one model value (k1, Fa1) e.g. when oggm
-            # overestimates or underestimates Frontal ablation
-            # we then add (0,0) as another point along the line.
-            # k=0 and Fa=0 is a valid solution
+            # overestimates Frontal ablation
+            # we then add (0,0) as another point along the data model fit.
+            # k=0 and Fa=0 is a valid solution.
             if len(df_oggm.index.values) <= 2:
-                df_oggm.loc[len(df_oggm) + 1] = 0
+                df_oggm.loc[len(df_oggm) + 1] = 0.0
                 df_oggm = df_oggm.sort_values(by=['k_values']).reset_index(drop=True)
             else:
                 df_oggm = df_oggm
 
             k_values = df_oggm.k_values.values
-            calving_fluxes = df_oggm.q_calving_RACMO_mean.values
+            calving_fluxes = df_oggm.calving_flux.values
 
             # Get the equation for the model data. y = ax + b
             slope, intercept, r_value, p_value, std_err = linregress(k_values,
                                                                      calving_fluxes)
 
-            if intercept_obs == 0:
-                Z_value = [0, 0]
-            else:
-                Z_value = misc.solve_linear_equation(slope_obs, intercept_obs,
-                                                     slope, intercept)
-            if intercept_lwl == 0:
-                Z_lower_bound = [0, 0]
-            else:
-                Z_lower_bound = misc.solve_linear_equation(slope_lwl,
-                                                           intercept_lwl,
-                                                           slope, intercept)
-            if intercept_upl == 0:
-                Z_upper_bound = [0, 0]
-            else:
-                Z_upper_bound = misc.solve_linear_equation(slope_upl,
-                                                           intercept_upl,
-                                                           slope, intercept)
+            # if intercept_obs == 0:
+            #     Z_value = [0, 0]
+            # else:
+            Z_value = misc.solve_linear_equation(slope_obs,
+                                                 intercept_obs,
+                                                 slope, intercept)
+            # if intercept_lwl == 0:
+            #     Z_lower_bound = [0, 0]
+            # else:
+            Z_lower_bound = misc.solve_linear_equation(slope_lwl,
+                                                       intercept_lwl,
+                                                       slope, intercept)
+            # if intercept_upl == 0:
+            #     Z_upper_bound = [0, 0]
+            # else:
+            Z_upper_bound = misc.solve_linear_equation(slope_upl,
+                                                       intercept_upl,
+                                                       slope, intercept)
 
-        #TODO: MAKE sure we are able to save negative racmo values area and
-        # rgi ids !!!
-        # Saving the intercept to observations and linear fit statistics
-        ids = np.append(ids, rgi_id)
-        messages = np.append(messages, warning)
-        fa_racmo = np.append(fa_racmo, obs)
-        fa_racmo_lwl = np.append(fa_racmo_lwl, g[rgi_id]['low_lim_vel'][0][0])
-        fa_racmo_upl = np.append(fa_racmo_upl, g[rgi_id]['up_lim_vel'][0][0])
-        k_v = np.append(k_v, Z_value[0])
-        k_lw = np.append(k_lw, Z_lower_bound[0])
-        k_up = np.append(k_up, Z_upper_bound[0])
-        model_slope = np.append(model_slope, slope)
-        model_intercept = np.append(model_intercept, intercept)
-        r_values = np.append(r_values, r_value)
-        p_values = np.append(p_values, p_value)
-        std_errs = np.append(std_errs, std_err)
-
+    # Saving the intercept to observations and linear fit statistics
+    ids = np.append(ids, rgi_id)
+    messages = np.append(messages, warning)
+    fa_racmo = np.append(fa_racmo, g['obs_racmo'][0].q_calving_RACMO_mean.iloc[0])
+    fa_racmo_lwl = np.append(fa_racmo_lwl, g['low_lim_racmo'][0][0])
+    fa_racmo_upl = np.append(fa_racmo_upl, g['up_lim_racmo'][0][0])
+    k_v = np.append(k_v, Z_value[0])
+    k_lw = np.append(k_lw, Z_lower_bound[0])
+    k_up = np.append(k_up, Z_upper_bound[0])
+    model_slope = np.append(model_slope, slope)
+    model_intercept = np.append(model_intercept, intercept)
+    r_values = np.append(r_values, r_value)
+    p_values = np.append(p_values, p_value)
+    std_errs = np.append(std_errs, std_err)
 
 dk = {'RGIId': ids,
       'method': messages,
-      'surface_vel_obs': fa_racmo,
-      'obs_low_bound': fa_racmo_lwl,
-      'obs_up_bound': fa_racmo_lwl,
-      'k_for_obs_value': k_v,
+      'fa_racmo': fa_racmo,
+      'racmo_low_bound': fa_racmo_lwl,
+      'racmo_up_bound': fa_racmo_lwl,
+      'k_for_racmo_value': k_v,
       'k_for_lw_bound': k_lw,
       'k_for_up_bound': k_up,
       'model_fit_slope': model_slope,
@@ -140,6 +150,6 @@ dk = {'RGIId': ids,
       'model_fit_std_error': std_err}
 
 df = pd.DataFrame(data=dk)
-df.to_csv(os.path.join(output_path, 'velocity_fit_calibration_results.csv'))
+df.to_csv(os.path.join(output_path, 'racmo_fit_calibration_results.csv'))
 
 

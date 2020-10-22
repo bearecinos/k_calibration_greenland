@@ -54,24 +54,26 @@ for file in filenames:
 
         # Observations slope, intercept. y = ax + b
         # where a is zero and b is the observation
-        obs = g[rgi_id]['obs_vel'][0].vel_calving_front.iloc[0]
-        slope_obs, intercept_obs = [0, obs]
-        slope_lwl, intercept_lwl = [0, g[rgi_id]['low_lim_vel'][0][0]]
-        slope_upl, intercept_upl = [0, g[rgi_id]['up_lim_vel'][0][0]]
+        obs = g['obs_vel'][0].vel_calving_front.iloc[0]
+        low_bound = g['low_lim_vel'][0][0]
+        up_bound = g['up_lim_vel'][0][0]
+
+        slope_obs, intercept_obs = [0.0, obs]
+        slope_lwl, intercept_lwl = [0.0, low_bound]
+        slope_upl, intercept_upl = [0.0, up_bound]
 
         # Get linear fit for OGGM model data
 
         # Get the model data from the first calibration step
-        df_oggm = g[rgi_id]['oggm_vel'][0]
-        warning = g[rgi_id]['vel_message'][0]
+        df_oggm = g['oggm_vel'][0]
+        warning = g['vel_message'][0]
         # If there is only one model value (k1, vel1) e.g. when oggm
         # overestimates or underestimates velocities we then add (0,0)
         # as another point along the line. k=0 and velocity=0 is a
         # valid solution
         if len(df_oggm.index.values) <= 2:
-            df_oggm.loc[len(df_oggm) + 1] = 0
+            df_oggm.loc[len(df_oggm) + 1] = 0.0
             df_oggm = df_oggm.sort_values(by=['k_values']).reset_index(drop=True)
-            #print(df_oggm)
         else:
             df_oggm = df_oggm
 
@@ -95,8 +97,8 @@ for file in filenames:
         ids = np.append(ids, rgi_id)
         messages = np.append(messages, warning)
         vel_obs = np.append(vel_obs, obs)
-        vel_lwl = np.append(vel_lwl, g[rgi_id]['low_lim_vel'][0][0])
-        vel_upl = np.append(vel_upl, g[rgi_id]['up_lim_vel'][0][0])
+        vel_lwl = np.append(vel_lwl, low_bound)
+        vel_upl = np.append(vel_upl, up_bound)
         k_v = np.append(k_v, Z_value[0])
         k_lw = np.append(k_lw, Z_lower_bound[0])
         k_up = np.append(k_up, Z_upper_bound[0])
