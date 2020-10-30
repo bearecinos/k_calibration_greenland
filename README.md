@@ -7,8 +7,8 @@ This repository uses OGGMv1.2.0 pinned to the following [commit](https://github.
 The contents of the repository are the following:
 
 - `calibration_scripts`: Python scripts to find k values for different model configurations. Each configuration is constructed by finding the intercepts between model (Frontal ablation or surface velocity) estimates and velocity observations and RACMO Frontal ablation fluxes, including the intercepts to the lower and upper error. 
-- `cluster_scripts`: OGGM runs to produce the data or the calibration scripts. (To run in a cluster environment).
-- `k_tools`: Python modules to re-project velocity observations and RACMO to the OGGM glacier grid.
+- `cluster_scripts`: OGGM runs to produce the data for the calibration scripts. (To be run in a cluster environment).
+- `k_tools`: Python modules to re-project velocity observations and RACMO data into the OGGM glacier grid.
 - `config.ini`: Global paths to data . 
 
 > The documentation and calibration method is still under constant development. 
