@@ -4,7 +4,7 @@ This repository contains the scripts used to calibrate a frontal ablation parame
 
 This repository uses OGGMv1.2.0 pinned to the following [commit](https://github.com/OGGM/oggm/commit/d13b4438c6f0be2266cafb1ba21aa526eef93c14).
 
-The content of the repository is the following:
+The contents of the repository are the following:
 
 - `calibration_scripts`: Python scripts to find k values for different model configurations. Each configuration is constructed by finding the intercepts between model (Frontal ablation or surface velocity) estimates and velocity observations and RACMO Frontal ablation fluxes, including the intercepts to the lower and upper error. 
 - `cluster_scripts`: OGGM runs to produce the data or the calibration scripts. (To run in cluster a environment).
