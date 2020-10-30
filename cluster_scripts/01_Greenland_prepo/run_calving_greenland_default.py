@@ -1,6 +1,5 @@
 # This will run OGGM preprocessing task and the inversion with calving
 # For Greenland with default MB calibration and DEM: Glims
-
 from __future__ import division
 
 # Module logger
@@ -89,6 +88,13 @@ rgidf = rgidf.iloc[keep_glactype]
 connection = [2]
 keep_connection = [(i not in connection) for i in rgidf.Connect]
 rgidf = rgidf.iloc[keep_connection]
+
+# Make OGGM use ARTICDEM
+rgidf['DEM_SOURCE'] = 'ARCTICDEM'
+
+# for some glaciers there is no artic DEM we use gimp instead
+df_gimp = pd.read_csv(os.path.join(MAIN_PATH, config['glaciers_gimp']))
+rgidf.loc[rgidf['RGIId'].isin(df_gimp.RGIId.values), 'DEM_SOURCE'] = 'GIMP'
 
 # Sort for more efficient parallel computing
 rgidf = rgidf.sort_values('Area', ascending=False)

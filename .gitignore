@@ -2,6 +2,7 @@
 /output_data
 /plots
 /dev_notebooks
+/problematic_cases
 /.idea
 __pycache__/
 *.pyd

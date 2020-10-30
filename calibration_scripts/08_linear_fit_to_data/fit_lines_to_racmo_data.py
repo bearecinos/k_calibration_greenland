@@ -101,21 +101,14 @@ for file in filenames:
             slope, intercept, r_value, p_value, std_err = linregress(k_values,
                                                                      calving_fluxes)
 
-            # if intercept_obs == 0:
-            #     Z_value = [0, 0]
-            # else:
             Z_value = misc.solve_linear_equation(slope_obs,
                                                  intercept_obs,
                                                  slope, intercept)
-            # if intercept_lwl == 0:
-            #     Z_lower_bound = [0, 0]
-            # else:
+
             Z_lower_bound = misc.solve_linear_equation(slope_lwl,
                                                        intercept_lwl,
                                                        slope, intercept)
-            # if intercept_upl == 0:
-            #     Z_upper_bound = [0, 0]
-            # else:
+
             Z_upper_bound = misc.solve_linear_equation(slope_upl,
                                                        intercept_upl,
                                                        slope, intercept)
@@ -127,8 +120,11 @@ for file in filenames:
     fa_racmo_lwl = np.append(fa_racmo_lwl, g['low_lim_racmo'][0][0])
     fa_racmo_upl = np.append(fa_racmo_upl, g['up_lim_racmo'][0][0])
     k_v = np.append(k_v, Z_value[0])
+    np.clip(k_v, 0, None, out=k_v)
     k_lw = np.append(k_lw, Z_lower_bound[0])
+    np.clip(k_lw, 0, None, out=k_lw)
     k_up = np.append(k_up, Z_upper_bound[0])
+    np.clip(k_up, 0, None, out=k_up)
     model_slope = np.append(model_slope, slope)
     model_intercept = np.append(model_intercept, intercept)
     r_values = np.append(r_values, r_value)

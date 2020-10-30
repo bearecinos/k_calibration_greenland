@@ -77,12 +77,19 @@ rgidf_ice_cap = rgidf[rgidf['RGIId'].str.match('RGI60-05.10315')]
 # Get the id's for filter
 ice_cap_ids = rgidf_ice_cap.RGIId.values
 
-# Removing the Ice cap
+# keeping only the Ice cap
 keep_indexes = [(i in ice_cap_ids) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_indexes]
 
 # Sort for more efficient parallel computing
 rgidf = rgidf.sort_values('Area', ascending=False)
+
+# Make OGGM use ARTICDEM
+rgidf['DEM_SOURCE'] = 'ARCTICDEM'
+
+# for some parts of the ice cap there is no artic DEM we use gimp instead
+df_gimp = pd.read_csv(os.path.join(MAIN_PATH, config['glaciers_gimp']))
+rgidf.loc[rgidf['RGIId'].isin(df_gimp.RGIId.values), 'DEM_SOURCE'] = 'GIMP'
 
 log.info('Starting run for RGI reg: ' + rgi_region)
 log.info('Number of glaciers: {}'.format(len(rgidf)))

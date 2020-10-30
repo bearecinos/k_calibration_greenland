@@ -100,7 +100,13 @@ ids = de.RGIId.values
 keep_errors = [(i not in ids) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_errors]
 
-# print(len(rgidf))
+# Make OGGM use ARTICDEM
+rgidf['DEM_SOURCE'] = 'ARCTICDEM'
+
+# for some glaciers there is no artic DEM we use gimp instead
+df_gimp = pd.read_csv(os.path.join(MAIN_PATH, config['glaciers_gimp']))
+rgidf.loc[rgidf['RGIId'].isin(df_gimp.RGIId.values), 'DEM_SOURCE'] = 'GIMP'
+
 # Run a single id for testing
 # glacier = ['RGI60-05.00304', 'RGI60-05.08443']
 # keep_indexes = [(i in glacier) for i in rgidf.RGIId]
@@ -147,8 +153,8 @@ length_fls = []
 
 files_no_data = []
 
-dvel = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['vel_path']))
-derr = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['error_vel_path']))
+dvel = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['vel_golive']))
+derr = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['error_vel_golive']))
 
 for gdir in gdirs:
 
