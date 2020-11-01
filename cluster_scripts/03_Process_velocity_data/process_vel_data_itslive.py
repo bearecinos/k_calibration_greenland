@@ -11,6 +11,8 @@ import geopandas as gpd
 import pandas as pd
 from configobj import ConfigObj
 import time
+import salem
+import xarray as xr
 # Imports oggm
 import oggm.cfg as cfg
 from oggm import workflow
@@ -153,8 +155,19 @@ length_fls = []
 
 files_no_data = []
 
-dvel = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['vel_path']))
-derr = utils_vel.open_vel_raster(os.path.join(MAIN_PATH, config['error_vel_path']))
+# We need the components of vel
+fx = os.path.join(MAIN_PATH, config['vel_x_path'])
+fy = os.path.join(MAIN_PATH, config['vel_y_path'])
+# And Error
+ex = os.path.join(MAIN_PATH, config['err_x_path'])
+ey = os.path.join(MAIN_PATH, config['err_y_path'])
+
+# Open the files with salem
+dsx = salem.GeoTiff(fx)
+dsy = salem.GeoTiff(fy)
+
+dex = salem.GeoTiff(ex)
+dey = salem.GeoTiff(ey)
 
 for gdir in gdirs:
 
@@ -164,10 +177,25 @@ for gdir in gdirs:
     shp_path = os.path.join(gdir.dir, 'RGI60-05.shp')
     shp = gpd.read_file(shp_path)
 
+    utils_vel.its_live_to_gdir(gdir,
+                               dsx=dsx, dsy=dsy,
+                               dex=dex, dey=dey,
+                               fx=fx, ex=ex)
+
+    file_vel = xr.open_dataset(gdir.get_filepath('gridded_data'))
+    proj = file_vel.attrs['proj_srs']
+
+    # Add the proj info to all variables
+    for v in file_vel.variables:
+        file_vel[v].attrs['pyproj_srs'] = proj
+
+    dvel = file_vel.obs_icevel
+    derr = file_vel.obs_icevel_error
+
     # we crop the satellite data to the centerline shape file
     dvel_fls, derr_fls = utils_vel.crop_vel_data_to_flowline(dvel, derr, shp)
 
-    out = utils_vel.calculate_observation_vel(gdir, dvel_fls, derr_fls)
+    out = utils_vel.calculate_itslive_vel(gdir, dvel_fls, derr_fls)
 
     if np.any(out[2]):
         ids = np.append(ids, gdir.rgi_id)

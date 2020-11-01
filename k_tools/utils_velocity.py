@@ -6,8 +6,10 @@ import rasterio
 import salem
 from affine import Affine
 from salem import wgs84
+import xarray as xr
 from collections import defaultdict
 from k_tools.misc import _get_flowline_lonlat
+from oggm import utils
 # Module logger
 log = logging.getLogger(__name__)
 
@@ -145,6 +147,239 @@ def calculate_observation_vel(gdir, ds_fls, dr_fls):
     err_fls_all = np.around(dr_mean, decimals=2)
     vel_fls_end = np.around(ds_mean_end, decimals=2)
     err_fls_end = np.around(dr_mean_end, decimals=2)
+
+    return vel_fls_all, err_fls_all, vel_fls_end, err_fls_end, len(x)
+
+
+def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
+    """ Reproject the its_live files to the given glacier directory.
+        based on the function from oggm_shop:
+        https://github.com/OGGM/oggm/blob/master/oggm/shop/its_live.py#L79
+
+        Variables are added to the gridded_data nc file.
+        Reprojecting velocities from one map proj to another is done
+        reprojecting the vector distances. In this process, absolute velocities
+        might change as well because map projections do not always preserve
+        distances -> we scale them back to the original velocities as per the
+        ITS_LIVE documentation that states that velocities are given in
+        ground units, i.e. absolute velocities.
+        We use bilinear interpolation to reproject the velocities to the local
+        glacier map.
+
+        Parameters
+        ----------
+        gdir : :py:class:`oggm.GlacierDirectory`
+            where to write the data
+        dsx: :salem.Geotiff: velocity in the x direction for Greenland
+        dsy: :salem.Geotiff: velocity in the y direction for Greenland
+        dex: :salem.Geotiff: velocity error in the x direction Greenland
+        dey: :salem.Geotiff: velocity error in the y direction Greenland
+        fx: path directory to original velocity data (x direction)
+        ex: path directory to original velocity error data (x direction)
+        These last two variables are needed to map missing data since salem
+        Geotiff still does not do it.
+        """
+
+    # subset its live data to our glacier map
+    grid_gla = gdir.grid.center_grid
+    proj_vel = dsx.grid.proj
+
+    x0, x1, y0, y1 = grid_gla.extent_in_crs(proj_vel)
+
+    # Same projection for all the itslive data
+    dsx.set_subset(corners=((x0, y0), (x1, y1)), crs=proj_vel, margin=4)
+    dsy.set_subset(corners=((x0, y0), (x1, y1)), crs=proj_vel, margin=4)
+
+    dex.set_subset(corners=((x0, y0), (x1, y1)), crs=proj_vel, margin=4)
+    dey.set_subset(corners=((x0, y0), (x1, y1)), crs=proj_vel, margin=4)
+
+    grid_vel = dsx.grid.center_grid
+
+    # TODO: this should be taken care of by salem
+    # https://github.com/fmaussion/salem/issues/171
+    with rasterio.Env():
+        with rasterio.open(fx) as src:
+            nodata = getattr(src, 'nodata', -32767.0)
+        with rasterio.open(ex) as src:
+            nodata_err = getattr(src, 'nodata', -32767.0)
+
+    # Get the coords at t0
+    xx0, yy0 = grid_vel.center_grid.xy_coordinates
+
+    # Compute coords at t1
+    xx1 = dsx.get_vardata()
+    yy1 = dsy.get_vardata()
+
+    ex1 = dex.get_vardata()
+    ey1 = dey.get_vardata()
+
+    non_valid = (xx1 == nodata) | (yy1 == nodata)
+    non_valid_e = (ex1 == nodata_err) | (ey1 == nodata_err)
+
+    xx1[non_valid] = np.NaN
+    yy1[non_valid] = np.NaN
+
+    ex1[non_valid_e] = np.NaN
+    ey1[non_valid_e] = np.NaN
+
+    orig_vel = np.sqrt(xx1 ** 2 + yy1 ** 2)
+    orig_vel_e = np.sqrt(ex1 ** 2 + ey1 ** 2)
+
+    xx1 += xx0
+    yy1 += yy0
+
+    ex1 += xx0
+    ey1 += yy0
+
+    # Transform both to glacier proj
+    xx0, yy0 = salem.transform_proj(proj_vel, grid_gla.proj, xx0, yy0)
+    xx1, yy1 = salem.transform_proj(proj_vel, grid_gla.proj, xx1, yy1)
+
+    ex0, ey0 = salem.transform_proj(proj_vel, grid_gla.proj, xx0, yy0)
+    ex1, ey1 = salem.transform_proj(proj_vel, grid_gla.proj, ex1, ey1)
+
+    # Correct no data after proj as well (inf)
+    xx1[non_valid] = np.NaN
+    yy1[non_valid] = np.NaN
+
+    ex1[non_valid_e] = np.NaN
+    ey1[non_valid_e] = np.NaN
+
+    # Compute velocities from there
+    vx = xx1 - xx0
+    vy = yy1 - yy0
+
+    ex = ex1 - ex0
+    ey = ey1 - ey0
+
+    # Scale back velocities - https://github.com/OGGM/oggm/issues/1014
+    new_vel = np.sqrt(vx ** 2 + vy ** 2)
+    new_vel_e = np.sqrt(ex ** 2 + ey ** 2)
+
+    p_ok = new_vel > 0.1  # avoid div by zero
+    vx[p_ok] = vx[p_ok] * orig_vel[p_ok] / new_vel[p_ok]
+    vy[p_ok] = vy[p_ok] * orig_vel[p_ok] / new_vel[p_ok]
+
+    p_ok_e = new_vel_e > 0.0  # avoid div by zero
+    ex[p_ok_e] = ex[p_ok_e] * orig_vel_e[p_ok_e] / new_vel_e[p_ok_e]
+    ey[p_ok_e] = ey[p_ok_e] * orig_vel_e[p_ok_e] / new_vel_e[p_ok_e]
+
+    # And transform to local map
+    vx = grid_gla.map_gridded_data(vx, grid=grid_vel, interp='linear')
+    vy = grid_gla.map_gridded_data(vy, grid=grid_vel, interp='linear')
+
+    ex = grid_gla.map_gridded_data(ex, grid=grid_vel, interp='linear')
+    ey = grid_gla.map_gridded_data(ey, grid=grid_vel, interp='linear')
+
+    vel = np.sqrt(vx ** 2 + vy ** 2)
+    vel_e = np.sqrt(ex ** 2 + ey ** 2)
+
+    # Write
+    with utils.ncDataset(gdir.get_filepath('gridded_data'), 'a') as nc:
+        vn = 'obs_icevel_x'
+        if vn in nc.variables:
+            v = nc.variables[vn]
+        else:
+            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
+        v.units = 'm yr-1'
+        v.long_name = 'ITS LIVE velocity data in x map direction'
+        v[:] = vx
+
+        vn = 'obs_icevel_y'
+        if vn in nc.variables:
+            v = nc.variables[vn]
+        else:
+            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
+        v.units = 'm yr-1'
+        v.long_name = 'ITS LIVE velocity data in y map direction'
+        v[:] = vy
+
+        vn = 'obs_icevel_x_error'
+        if vn in nc.variables:
+            v = nc.variables[vn]
+        else:
+            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
+        v.units = 'm yr-1'
+        v.long_name = 'ITS LIVE error velocity data in x map direction'
+        v[:] = ex
+
+        vn = 'obs_icevel_y_error'
+        if vn in nc.variables:
+            v = nc.variables[vn]
+        else:
+            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
+        v.units = 'm yr-1'
+        v.long_name = 'ITS LIVE error velocity data in y map direction'
+        v[:] = ey
+
+        vn = 'obs_icevel'
+        if vn in nc.variables:
+            v = nc.variables[vn]
+        else:
+            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
+        v.units = 'm yr-1'
+        v.long_name = 'ITS LIVE velocity magnitude'
+        v[:] = vel
+
+        vn = 'obs_icevel_error'
+        if vn in nc.variables:
+            v = nc.variables[vn]
+        else:
+            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
+        v.units = 'm yr-1'
+        v.long_name = 'ITS LIVE error velocity magnitude'
+        v[:] = vel_e
+
+
+def calculate_itslive_vel(gdir, ds_fls, dr_fls):
+    """
+    Calculates the mean velocity and error at the end of the flowline
+    exactly 5 pixels upstream of the last part of the glacier that contains
+    a velocity measurements from Itslive
+    :param
+        gdir: Glacier directory
+        ds_flowline: xarray data containing vel observations from the main
+                     lowline
+        dr_flowline: xarray data containing errors in vel observations from
+                     the main flowline
+    :return
+        ds_mean: a mean velocity value over the last parts of the flowline.
+        dr_mean: a mean error of the velocity over the last parts of the
+                 main flowline.
+    """
+
+    coords = _get_flowline_lonlat(gdir)
+
+    x, y = coords[0].geometry[3].coords.xy
+
+    # We only want one third of the main centerline! kind of the end of the
+    # glacier. For very long glaciers this might not be that ideal
+
+    x_2 = x[-np.int(len(x) / 3):]
+    y_2 = y[-np.int(len(x) / 3):]
+
+    raster_proj = pyproj.Proj(ds_fls.attrs['pyproj_srs'])
+
+    # For the entire flowline
+    x_all, y_all = salem.gis.transform_proj(wgs84, raster_proj, x, y)
+    vel_fls = ds_fls.interp(x=x_all, y=y_all, method='nearest')
+    err_fls = dr_fls.interp(x=x_all, y=y_all, method='nearest')
+    # Calculating means
+    ds_mean = vel_fls.mean(skipna=True).data
+    dr_mean = err_fls.mean(skipna=True).data
+
+    # For the end of the glacier
+    x_end, y_end = salem.gis.transform_proj(wgs84, raster_proj, x_2, y_2)
+    vel_end = ds_fls.interp(x=x_end, y=y_end, method='nearest')
+    err_end = dr_fls.interp(x=x_end, y=y_end, method='nearest')
+    # Calculating means
+    ds_mean_end = vel_end.mean(skipna=True).data
+    dr_mean_end = err_end.mean(skipna=True).data
+
+    vel_fls_all = np.around(ds_mean.flatten()[0], decimals=2)
+    err_fls_all = np.around(dr_mean.flatten()[0], decimals=2)
+    vel_fls_end = np.around(ds_mean_end.flatten()[0], decimals=2)
+    err_fls_end = np.around(dr_mean_end.flatten()[0], decimals=2)
 
     return vel_fls_all, err_fls_all, vel_fls_end, err_fls_end, len(x)
 
