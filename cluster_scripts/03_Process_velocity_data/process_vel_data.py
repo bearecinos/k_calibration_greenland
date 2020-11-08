@@ -107,7 +107,7 @@ rgidf['DEM_SOURCE'] = 'ARCTICDEM'
 df_gimp = pd.read_csv(os.path.join(MAIN_PATH, config['glaciers_gimp']))
 rgidf.loc[rgidf['RGIId'].isin(df_gimp.RGIId.values), 'DEM_SOURCE'] = 'GIMP'
 
-# Run a single id for testing
+# # Run a single id for testing
 # glacier = ['RGI60-05.00304', 'RGI60-05.08443']
 # keep_indexes = [(i in glacier) for i in rgidf.RGIId]
 # rgidf = rgidf.iloc[keep_indexes]
