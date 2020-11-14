@@ -101,6 +101,13 @@ ids = de.RGIId.values
 keep_errors = [(i not in ids) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_errors]
 
+# Make OGGM use ARTICDEM
+rgidf['DEM_SOURCE'] = 'ARCTICDEM'
+
+# for some glaciers there is no artic DEM we use gimp instead
+df_gimp = pd.read_csv(os.path.join(MAIN_PATH, config['glaciers_gimp']))
+rgidf.loc[rgidf['RGIId'].isin(df_gimp.RGIId.values), 'DEM_SOURCE'] = 'GIMP'
+
 # Sort for more efficient parallel computing
 rgidf = rgidf.sort_values('Area', ascending=False)
 

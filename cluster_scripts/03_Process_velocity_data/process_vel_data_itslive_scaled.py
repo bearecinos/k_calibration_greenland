@@ -29,7 +29,7 @@ start = time.time()
 MAIN_PATH = os.path.expanduser('~/k_calibration_greenland/')
 sys.path.append(MAIN_PATH)
 
-config = ConfigObj(os.path.join(MAIN_PATH,'config.ini'))
+config = ConfigObj(os.path.join(MAIN_PATH, 'config.ini'))
 
 # velocity module
 from k_tools import utils_velocity as utils_vel
@@ -181,24 +181,28 @@ for gdir in gdirs:
     utils_vel.its_live_to_gdir(gdir,
                                dsx=dsx, dsy=dsy,
                                dex=dex, dey=dey,
-                               fx=fx, ex=ex)
+                               fx=fx)
 
     file_vel = xr.open_dataset(gdir.get_filepath('gridded_data'))
     proj = file_vel.attrs['proj_srs']
 
-    # Add the proj info to all variables
-    for v in file_vel.variables:
-        file_vel[v].attrs['pyproj_srs'] = proj
+    vx = file_vel.obs_icevel_x
+    vy = file_vel.obs_icevel_y
+    dvel = (vx**2 + vy**2)
 
-    dvel = file_vel.obs_icevel
-    derr = file_vel.obs_icevel_error
+    dvel.attrs['pyproj_srs'] = proj
+
+    ex = file_vel.obs_icevel_x_error
+    ey = file_vel.obs_icevel_y_error
+    derr = (ex**2 + ey**2)
+    derr.attrs['pyproj_srs'] = proj
 
     # we crop the satellite data to the centerline shape file
     dvel_fls, derr_fls = utils_vel.crop_vel_data_to_flowline(dvel, derr, shp)
 
     out = utils_vel.calculate_itslive_vel(gdir, dvel_fls, derr_fls)
 
-    if math.isfinite(out[2]) and out[2] < 1e30:
+    if math.isfinite(out[2]) and math.isfinite(out[0]):
         ids = np.append(ids, gdir.rgi_id)
         vel_fls_avg = np.append(vel_fls_avg, out[0])
         err_fls_avg = np.append(err_fls_avg, out[1])
@@ -214,8 +218,6 @@ for gdir in gdirs:
     else:
         print('There is no velocity data for this glacier')
         files_no_data = np.append(files_no_data, gdir.rgi_id)
-
-
 
 d = {'RGIId': files_no_data}
 df = pd.DataFrame(data=d)

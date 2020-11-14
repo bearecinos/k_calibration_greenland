@@ -6,7 +6,6 @@ import rasterio
 import salem
 from affine import Affine
 from salem import wgs84
-import xarray as xr
 from collections import defaultdict
 from k_tools.misc import _get_flowline_lonlat
 from oggm import utils
@@ -151,20 +150,20 @@ def calculate_observation_vel(gdir, ds_fls, dr_fls):
     return vel_fls_all, err_fls_all, vel_fls_end, err_fls_end, len(x)
 
 
-def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
-    """ Reproject the its_live files to the given glacier directory.
+def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx):
+    """ Re-project its_live files to a given glacier directory.
         based on the function from oggm_shop:
         https://github.com/OGGM/oggm/blob/master/oggm/shop/its_live.py#L79
-
         Variables are added to the gridded_data nc file.
-        Reprojecting velocities from one map proj to another is done
-        reprojecting the vector distances. In this process, absolute velocities
-        might change as well because map projections do not always preserve
+        Re-projecting velocities from one map proj to another is done
+        re-projecting the vector distances.
+        In this process, absolute velocities might change as well because
+        map projections do not always preserve
         distances -> we scale them back to the original velocities as per the
-        ITS_LIVE documentation that states that velocities are given in
+        ITS_LIVE documentation. Which states that velocities are given in
         ground units, i.e. absolute velocities.
-        We use bilinear interpolation to reproject the velocities to the local
-        glacier map.
+        We use bi-linear interpolation to re-project the velocities to
+        the local glacier map.
 
         Parameters
         ----------
@@ -175,9 +174,6 @@ def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
         dex: :salem.Geotiff: velocity error in the x direction Greenland
         dey: :salem.Geotiff: velocity error in the y direction Greenland
         fx: path directory to original velocity data (x direction)
-        ex: path directory to original velocity error data (x direction)
-        These last two variables are needed to map missing data since salem
-        Geotiff still does not do it.
         """
 
     # subset its live data to our glacier map
@@ -200,8 +196,6 @@ def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
     with rasterio.Env():
         with rasterio.open(fx) as src:
             nodata = getattr(src, 'nodata', -32767.0)
-        with rasterio.open(ex) as src:
-            nodata_err = getattr(src, 'nodata', -32767.0)
 
     # Get the coords at t0
     xx0, yy0 = grid_vel.center_grid.xy_coordinates
@@ -214,7 +208,7 @@ def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
     ey1 = dey.get_vardata()
 
     non_valid = (xx1 == nodata) | (yy1 == nodata)
-    non_valid_e = (ex1 == nodata_err) | (ey1 == nodata_err)
+    non_valid_e = (ex1 == nodata) | (ey1 == nodata)
 
     xx1[non_valid] = np.NaN
     yy1[non_valid] = np.NaN
@@ -256,11 +250,11 @@ def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
     new_vel = np.sqrt(vx ** 2 + vy ** 2)
     new_vel_e = np.sqrt(ex ** 2 + ey ** 2)
 
-    p_ok = new_vel > 0.1  # avoid div by zero
+    p_ok = new_vel > 1e-5  # avoid div by zero
     vx[p_ok] = vx[p_ok] * orig_vel[p_ok] / new_vel[p_ok]
     vy[p_ok] = vy[p_ok] * orig_vel[p_ok] / new_vel[p_ok]
 
-    p_ok_e = new_vel_e > 0.0  # avoid div by zero
+    p_ok_e = new_vel_e > 1e-5  # avoid div by zero
     ex[p_ok_e] = ex[p_ok_e] * orig_vel_e[p_ok_e] / new_vel_e[p_ok_e]
     ey[p_ok_e] = ey[p_ok_e] * orig_vel_e[p_ok_e] / new_vel_e[p_ok_e]
 
@@ -270,9 +264,6 @@ def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
 
     ex = grid_gla.map_gridded_data(ex, grid=grid_vel, interp='linear')
     ey = grid_gla.map_gridded_data(ey, grid=grid_vel, interp='linear')
-
-    vel = np.sqrt(vx ** 2 + vy ** 2)
-    vel_e = np.sqrt(ex ** 2 + ey ** 2)
 
     # Write
     with utils.ncDataset(gdir.get_filepath('gridded_data'), 'a') as nc:
@@ -311,24 +302,6 @@ def its_live_to_gdir(gdir, dsx, dsy, dex, dey, fx, ex):
         v.units = 'm yr-1'
         v.long_name = 'ITS LIVE error velocity data in y map direction'
         v[:] = ey
-
-        vn = 'obs_icevel'
-        if vn in nc.variables:
-            v = nc.variables[vn]
-        else:
-            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
-        v.units = 'm yr-1'
-        v.long_name = 'ITS LIVE velocity magnitude'
-        v[:] = vel
-
-        vn = 'obs_icevel_error'
-        if vn in nc.variables:
-            v = nc.variables[vn]
-        else:
-            v = nc.createVariable(vn, 'f4', ('y', 'x',), zlib=True)
-        v.units = 'm yr-1'
-        v.long_name = 'ITS LIVE error velocity magnitude'
-        v[:] = vel_e
 
 
 def calculate_itslive_vel(gdir, ds_fls, dr_fls):
@@ -456,7 +429,8 @@ def find_k_values_within_vel_range(df_oggm, df_vel):
         mu_stars = df_oggm_new.mu_star
         if mu_stars.iloc[-1] == 0:
             df_oggm_new = df_oggm_new.iloc[-2]
-            message = 'OGGM is within range but mu_star does not allows more calving'
+            message = 'OGGM is within range but mu_star ' \
+                      'does not allows more calving'
         else:
             df_oggm_new = df_oggm_new
             message = 'OGGM is within range'
