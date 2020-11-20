@@ -110,7 +110,7 @@ rgidf['DEM_SOURCE'] = 'ARCTICDEM'
 df_gimp = pd.read_csv(os.path.join(MAIN_PATH, config['glaciers_gimp']))
 rgidf.loc[rgidf['RGIId'].isin(df_gimp.RGIId.values), 'DEM_SOURCE'] = 'GIMP'
 
-# # Run a single id for testing
+## Run a single id for testing
 # glacier = ['RGI60-05.00304', 'RGI60-05.08443']
 # keep_indexes = [(i in glacier) for i in rgidf.RGIId]
 # rgidf = rgidf.iloc[keep_indexes]
@@ -188,13 +188,13 @@ for gdir in gdirs:
 
     vx = file_vel.obs_icevel_x
     vy = file_vel.obs_icevel_y
-    dvel = (vx**2 + vy**2)
+    dvel = np.sqrt(vx**2 + vy**2)
 
     dvel.attrs['pyproj_srs'] = proj
 
     ex = file_vel.obs_icevel_x_error
     ey = file_vel.obs_icevel_y_error
-    derr = (ex**2 + ey**2)
+    derr = np.sqrt(ex**2 + ey**2)
     derr.attrs['pyproj_srs'] = proj
 
     # we crop the satellite data to the centerline shape file
@@ -207,13 +207,11 @@ for gdir in gdirs:
         vel_fls_avg = np.append(vel_fls_avg, out[0])
         err_fls_avg = np.append(err_fls_avg, out[1])
 
-        rel_tol_fls = np.append(rel_tol_fls,
-                                np.around((out[1] / out[0]), decimals=2))
+        rel_tol_fls = np.append(rel_tol_fls, out[1] / out[0])
         vel_calving_front = np.append(vel_calving_front, out[2])
         err_calving_front = np.append(err_calving_front, out[3])
         rel_tol_calving_front = np.append(rel_tol_calving_front,
-                                          np.around((out[3] / out[2]),
-                                                    decimals=2))
+                                          out[3] / out[2])
         length_fls = np.append(length_fls, out[4])
     else:
         print('There is no velocity data for this glacier')

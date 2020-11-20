@@ -68,6 +68,11 @@ def normalised(value):
     return n_value
 
 
+def num_of_zeros(n):
+  s = '{:.16f}'.format(n).split('.')[1]
+  return len(s) - len(s.lstrip('0'))
+
+
 def find_nearest(array, value):
     idx = (np.abs(array - value)).argmin()
     return idx

@@ -406,7 +406,9 @@ def find_k_values_within_vel_range(df_oggm, df_vel):
     obs_vel = df_vel.vel_calving_front.values
     error_vel = df_vel.error_calving_front.values
 
-    r_tol = df_vel.rel_tol_calving_front.values
+    r_tol = error_vel/obs_vel
+    if r_tol < 0.1:
+        r_tol = 0.1
 
     first_oggm_value = df_oggm.iloc[0].velocity_surf
     last_oggm_value = df_oggm.iloc[-1].velocity_surf

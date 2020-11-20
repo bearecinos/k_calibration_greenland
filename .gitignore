@@ -1,5 +1,8 @@
 /input_data
 /output_data
+/output_data_both
+/output_data_gimp
+/plotting_scripts
 /plots
 /dev_notebooks
 /problematic_cases
