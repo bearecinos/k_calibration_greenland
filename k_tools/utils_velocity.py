@@ -426,6 +426,9 @@ def find_k_values_within_vel_range(df_oggm, df_vel):
     elif not index and (first_oggm_value > up_lim):
         df_oggm_new = df_oggm.iloc[0]
         message = 'OGGM overestimates velocity'
+    elif not index:
+        df_oggm_new = df_oggm
+        message = 'k factor step too big'
     else:
         df_oggm_new = df_oggm.loc[index]
         mu_stars = df_oggm_new.mu_star

@@ -22,10 +22,12 @@ from k_tools import utils_velocity as utils_vel
 WORKING_DIR = os.path.join(MAIN_PATH, config['sensitivity_exp'], '*.csv')
 
 # Read velocity observations from MEaSURES
-d_obs = pd.read_csv(os.path.join(MAIN_PATH, config['processed_vel']))
+d_obs_itslive = pd.read_csv(os.path.join(MAIN_PATH,
+                                         config['processed_vel_itslive']))
 
 # Path to write out the data:
-output_path = os.path.join(MAIN_PATH, config['vel_calibration_results'])
+output_path = os.path.join(MAIN_PATH,
+                           config['vel_calibration_results_itslive'])
 
 # Read the RGI to store Area for statistics
 rgidf = gpd.read_file(os.path.join(MAIN_PATH, config['RGI_FILE']))
@@ -60,15 +62,17 @@ for j, f in enumerate(filenames):
     glacier = glacier.drop_duplicates(subset=('calving_flux'), keep=False)
     base = os.path.basename(f)
     rgi_id = os.path.splitext(base)[0]
+    print(rgi_id)
+    print(glacier)
     if glacier.empty:
         area = rgidf.Area.loc[rgidf.RGIId == rgi_id].values
         files_no_calving = np.append(files_no_calving, rgi_id)
         Area_one = np.append(Area_one, area)
     else:
         # Get observations for that glacier
-        index = d_obs.index[d_obs['RGI_ID'] == rgi_id].tolist()
+        index_itslive = d_obs_itslive.index[d_obs_itslive['RGI_ID'] == rgi_id].tolist()
 
-        if len(index) == 0:
+        if len(index_itslive) == 0:
             print('There is no Velocity data for this glacier' + rgi_id)
             files_no_vel_data = np.append(files_no_vel_data, rgi_id)
             area = rgidf.Area.loc[rgidf.RGIId == rgi_id].values
@@ -77,7 +81,8 @@ for j, f in enumerate(filenames):
         else:
             # Perform the first step calibration and save the output as a
             # pickle file per glacier
-            data_obs = d_obs.iloc[index]
+            data_obs = d_obs_itslive.iloc[index_itslive]
+
             output[rgi_id] = utils_vel.find_k_values_within_vel_range(glacier,
                                                                       data_obs)
             fp = os.path.join(output_path, rgi_id + '.pkl')

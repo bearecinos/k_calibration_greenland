@@ -27,7 +27,7 @@ if not os.path.exists(output_path):
 
 # Sort files
 filenames = sorted(glob.glob(os.path.join(MAIN_PATH,
-                                          config['vel_calibration_results'],
+                                          config['vel_calibration_results_itslive'],
                                           "*.pkl")))
 
 # Long list of variables to save after calibration.
@@ -127,6 +127,6 @@ dk = {'RGIId': ids,
       'model_fit_std_error': std_err}
 
 df = pd.DataFrame(data=dk)
-df.to_csv(os.path.join(output_path, 'velocity_fit_calibration_results.csv'))
+df.to_csv(os.path.join(output_path, 'velocity_fit_calibration_results_itslive.csv'))
 
 

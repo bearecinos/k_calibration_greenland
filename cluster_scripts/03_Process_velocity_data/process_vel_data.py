@@ -175,12 +175,11 @@ for gdir in gdirs:
         err_fls_avg = np.append(err_fls_avg, out[1])
 
         rel_tol_fls = np.append(rel_tol_fls,
-                                np.around((out[1] / out[0]), decimals=2))
+                                out[1] / out[0])
         vel_calving_front = np.append(vel_calving_front, out[2])
         err_calving_front = np.append(err_calving_front, out[3])
         rel_tol_calving_front = np.append(rel_tol_calving_front,
-                                          np.around((out[3] / out[2]),
-                                                    decimals=2))
+                                          out[3] / out[2])
         length_fls = np.append(length_fls, out[4])
 
     else:

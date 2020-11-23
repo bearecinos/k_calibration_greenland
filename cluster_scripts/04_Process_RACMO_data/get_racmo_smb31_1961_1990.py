@@ -188,4 +188,4 @@ dr = {'RGI_ID': ids,
       'q_calving_RACMO_cum': racmo_calving_cum}
 
 df_r = pd.DataFrame(data=dr)
-df_r.to_csv(cfg.PATHS['working_dir']+'racmo_data_'+time_start+time_end+'_.csv')
+df_r.to_csv(cfg.PATHS['working_dir']+'racmo_data_'+time_start+'_'+time_end+'.csv')
