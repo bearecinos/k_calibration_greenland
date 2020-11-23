@@ -125,8 +125,8 @@ def get_racmo_time_series(ds_sel_roi,
         ts_31 = None
     else:
         t_s = ds_sel_roi[var_name].mean(dim=[dim_one,
-                                            dim_two],
-                                            skipna=True)
+                                             dim_two],
+                                        skipna=True)
 
         ts = t_s.resample(time=alias).mean(dim=dim_three, skipna=True)
 
@@ -249,7 +249,8 @@ def process_racmo_data(gdir,
                                        dim_one='lon',
                                        dim_two='lat',
                                        dim_three='time',
-                                       time_start=time_start, time_end=time_end,
+                                       time_start=time_start,
+                                       time_end=time_end,
                                        alias=alias)
 
     melt_31 = get_racmo_time_series(melt_sel,

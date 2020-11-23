@@ -9,9 +9,7 @@ from salem import wgs84
 from shapely.ops import transform as shp_trafo
 from functools import partial
 from collections import OrderedDict
-from collections import defaultdict
 from oggm import cfg
-from scipy.stats import linregress
 
 # Module logger
 log = logging.getLogger(__name__)
@@ -69,8 +67,13 @@ def normalised(value):
 
 
 def num_of_zeros(n):
-  s = '{:.16f}'.format(n).split('.')[1]
-  return len(s) - len(s.lstrip('0'))
+    """
+    Count the number of zeros after decimal point
+    :param n: number
+    :return: number of zeros after decimal point
+    """
+    s = '{:.16f}'.format(n).split('.')[1]
+    return len(s) - len(s.lstrip('0'))
 
 
 def find_nearest(array, value):
@@ -233,7 +236,7 @@ def write_flowlines_to_shape(gdir, filesuffix='', path=True):
             c.write(feature(i, row))
 
 
-def calculate_PDM(gdir):
+def calculate_pdm(gdir):
     """Calculates the Positive degree month sum; is the total sum,
     of monthly averages temperatures above 0°C in a 31 yr period
     centered in t_star year and with a reference height at the free board.
@@ -246,9 +249,9 @@ def calculate_PDM(gdir):
     # Parameters
     temp_all_solid = cfg.PARAMS['temp_all_solid']
     temp_all_liq = cfg.PARAMS['temp_all_liq']
-    temp_melt = cfg.PARAMS['temp_melt']
+    # temp_melt = cfg.PARAMS['temp_melt']
     prcp_fac = cfg.PARAMS['prcp_scaling_factor']
-    default_grad = cfg.PARAMS['temp_default_gradient']
+    # default_grad = cfg.PARAMS['temp_default_gradient']
 
     df = gdir.read_json('local_mustar')
     tstar = df['t_star']
@@ -296,10 +299,10 @@ def calculate_PDM(gdir):
     temp_free_board = data_temp.iloc[-1]
     solid_prcp_top = data_prcp.iloc[0].sum()
 
-    PDM_temp = temp_free_board[temp_free_board > 0].sum()
-    PDM_number = temp_free_board[temp_free_board > 0].count()
+    pdm_temp = temp_free_board[temp_free_board > 0].sum()
+    pdm_number = temp_free_board[temp_free_board > 0].count()
 
-    return PDM_temp, PDM_number, solid_prcp_top
+    return pdm_temp, pdm_number, solid_prcp_top
 
 
 def solve_linear_equation(a1, b1, a2, b2):
@@ -314,13 +317,13 @@ def solve_linear_equation(a1, b1, a2, b2):
                 lower bound, value, upper bound)
         a2: Linear fit slope to the model data.
         b2: Linear fit intercept to the model data
-
-    :returns
-        Z: Intercepts (x, y) x will be k and y velocity.
+    Returns
+    -------
+        z: Intercepts (x, y) x will be k and y velocity.
     """
 
-    A = np.array([[-a1, 1], [-a2, 1]], dtype='float')
+    a = np.array([[-a1, 1], [-a2, 1]], dtype='float')
     b = np.array([b1, b2], dtype='float')
 
-    z = np.linalg.solve(A, b)
+    z = np.linalg.solve(a, b)
     return z
