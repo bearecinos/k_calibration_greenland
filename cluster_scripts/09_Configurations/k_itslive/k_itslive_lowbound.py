@@ -121,10 +121,10 @@ ids_no_data = d_no_data.RGIId.values
 keep_no_data = [(i not in ids_no_data) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_no_data]
 
-# Run a single id for testing
-glacier = ['RGI60-05.00304', 'RGI60-05.08443']
-keep_indexes = [(i in glacier) for i in rgidf.RGIId]
-rgidf = rgidf.iloc[keep_indexes]
+# # Run a single id for testing
+# glacier = ['RGI60-05.00304', 'RGI60-05.08443']
+# keep_indexes = [(i in glacier) for i in rgidf.RGIId]
+# rgidf = rgidf.iloc[keep_indexes]
 
 # Sort for more efficient parallel computing
 rgidf = rgidf.sort_values('Area', ascending=False)
@@ -163,7 +163,7 @@ execute_entity_task(tasks.prepare_for_inversion, gdirs, add_debug_var=True)
 execute_entity_task(tasks.mass_conservation_inversion, gdirs)
 
 file_suffix_one = 'no_calving_k_itslive_lowbound'
-utils.compile_glacier_statistics(gdirs, filesuffix=file_suffix_one)
+utils.compile_glacier_statistics(gdirs, filesuffix=file_suffix_one, inversion_only=True)
 
 # Log
 m, s = divmod(time.time() - start, 60)
@@ -192,4 +192,4 @@ for gdir in gdirs:
 
 # Compile output
 file_suffix_two = 'calving_k_itslive_lowbound'
-utils.compile_glacier_statistics(gdirs, filesuffix=file_suffix_two)
+utils.compile_glacier_statistics(gdirs, filesuffix=file_suffix_two, inversion_only=True)
