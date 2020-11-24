@@ -122,9 +122,9 @@ keep_no_data = [(i not in ids_no_data) for i in rgidf.RGIId]
 rgidf = rgidf.iloc[keep_no_data]
 
 # Run a single id for testing
-glacier = ['RGI60-05.00304', 'RGI60-05.08443']
-keep_indexes = [(i in glacier) for i in rgidf.RGIId]
-rgidf = rgidf.iloc[keep_indexes]
+# glacier = ['RGI60-05.00304', 'RGI60-05.08443']
+# keep_indexes = [(i in glacier) for i in rgidf.RGIId]
+# rgidf = rgidf.iloc[keep_indexes]
 
 # Sort for more efficient parallel computing
 rgidf = rgidf.sort_values('Area', ascending=False)
