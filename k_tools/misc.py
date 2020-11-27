@@ -7,12 +7,36 @@ import xarray as xr
 import pickle
 from salem import wgs84
 from shapely.ops import transform as shp_trafo
+import shapely.geometry as shpg
 from functools import partial
 from collections import OrderedDict
 from oggm import cfg
 
 # Module logger
 log = logging.getLogger(__name__)
+
+
+def splitall(path):
+    """
+    split a path into all its components
+    :param path
+    :return allparts
+    """
+    allparts = []
+    while 1:
+        parts = os.path.split(path)
+        if parts[0] == path:
+            # sentinel for absolute paths
+            allparts.insert(0, parts[0])
+            break
+        elif parts[1] == path:
+            # sentinel for relative paths
+            allparts.insert(0, parts[1])
+            break
+        else:
+            path = parts[0]
+            allparts.insert(0, parts[1])
+    return allparts
 
 
 def get_study_area(rgi, main_path, ice_cap_prepro_path):
@@ -186,7 +210,29 @@ def _get_flowline_lonlat(gdir):
     return olist
 
 
-def write_flowlines_to_shape(gdir, filesuffix='', path=True):
+def _get_catchment_widths_lonlat(gdir):
+    """Quick n dirty solution to write the flowlines catchment widths
+     as a shapefile"""
+    cls = gdir.read_pickle('inversion_flowlines')
+    olist = []
+    for j, cl in enumerate(cls[::-1]):
+        for wi, cur, (n1, n2) in zip(cl.widths, cl.line.coords, cl.normals):
+            _l = shpg.LineString([shpg.Point(cur + wi / 2. * n1),
+                                  shpg.Point(cur + wi / 2. * n2)])
+
+            mm = 1 if j == 0 else 0
+            gs = gpd.GeoSeries()
+            gs['RGIID'] = gdir.rgi_id
+            gs['LE_SEGMENT'] = np.rint(np.max(cl.dis_on_line) * gdir.grid.dx)
+            gs['MAIN'] = mm
+            tra_func = partial(gdir.grid.ij_to_crs, crs=wgs84)
+            gs['geometry'] = shp_trafo(tra_func, _l)
+            olist.append(gs)
+
+    return olist
+
+
+def write_flowlines_to_shape(gdir, filesuffix='', path=''):
     """Write the centerlines in a shapefile.
 
     Parameters
@@ -198,13 +244,67 @@ def write_flowlines_to_shape(gdir, filesuffix='', path=True):
         Set to a path to store the file to your chosen location
     """
 
-    if path is True:
+    if path == '':
         path = os.path.join(cfg.PATHS['working_dir'],
                             'glacier_centerlines' + filesuffix + '.shp')
+    else:
+        path = os.path.join(path, 'glacier_centerlines' + filesuffix + '.shp')
 
     olist = []
 
     olist.extend(_get_flowline_lonlat(gdir))
+
+    odf = gpd.GeoDataFrame(olist)
+
+    shema = dict()
+    props = OrderedDict()
+    props['RGIID'] = 'str:14'
+    props['LE_SEGMENT'] = 'int:9'
+    props['MAIN'] = 'int:9'
+    shema['geometry'] = 'LineString'
+    shema['properties'] = props
+
+    crs = {'init': 'epsg:4326'}
+
+    # some writing function from geopandas rep
+    from shapely.geometry import mapping
+    import fiona
+
+    def feature(i, row):
+        return {
+            'id': str(i),
+            'type': 'Feature',
+            'properties':
+                dict((k, v) for k, v in row.items() if k != 'geometry'),
+            'geometry': mapping(row['geometry'])}
+
+    with fiona.open(path, 'w', driver='ESRI Shapefile',
+                    crs=crs, schema=shema) as c:
+        for i, row in odf.iterrows():
+            c.write(feature(i, row))
+
+
+def write_catchments_to_shape(gdir, filesuffix='', path=''):
+    """Write the centerlines in a shapefile.
+
+    Parameters
+    ----------
+    gdir: Glacier directory
+    filesuffix : str add suffix to output file
+    path:
+        Set to "True" in order  to store the info in the working directory
+        Set to a path to store the file to your chosen location
+    """
+
+    if path == '':
+        path = os.path.join(cfg.PATHS['working_dir'],
+                            'glacier_catchments' + filesuffix + '.shp')
+    else:
+        path = os.path.join(path, 'glacier_catchments' + filesuffix + '.shp')
+
+    olist = []
+
+    olist.extend(_get_catchment_widths_lonlat(gdir))
 
     odf = gpd.GeoDataFrame(olist)
 

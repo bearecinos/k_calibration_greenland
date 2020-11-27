@@ -504,3 +504,71 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
     out['up_lim_racmo'].append(up_lim)
 
     return out
+
+
+def merge_racmo_calibration_results_with_glac_stats(calibration_path,
+                                                  glac_stats_path,
+                                                  exp_name):
+    """
+
+    :param calibration_path: path to racmo calibration results csv file
+        from performing a linear fits to the input data and model output.
+    :param glac_stats_path: path to OGGM glacier stats csv file after running
+    the model with a specific k configuration and racmo data.
+    (e.g racmo lowbound, value and upbound)
+    :param exp_name: name in str of the k configuration
+    :return: dataframe merged
+    """
+
+    # Read OGGM stats output
+    oggm_stats = pd.read_csv(glac_stats_path)
+
+    # Read calibration output and crop the file to the right k configuration
+    d_calibration = pd.read_csv(calibration_path, index_col='Unnamed: 0')
+    d_calibration.rename(columns={'RGIId': 'rgi_id'}, inplace=True)
+
+    if "lowbound" in exp_name:
+        d_calibration = d_calibration[['rgi_id',
+                                       'method',
+                                       'fa_racmo',
+                                       'racmo_low_bound',
+                                       'racmo_up_bound',
+                                       'k_for_lw_bound']]
+
+        d_calibration.rename(columns={
+                            'method': 'method_racmo',
+                            'k_for_lw_bound': 'k_for_lw_bound_racmo'
+        }, inplace=True)
+
+    if "upbound" in exp_name:
+        d_calibration = d_calibration[['rgi_id',
+                                       'method',
+                                       'fa_racmo',
+                                       'racmo_low_bound',
+                                       'racmo_up_bound',
+                                       'k_for_up_bound']]
+
+        d_calibration.rename(columns={
+            'method': 'method_racmo',
+            'k_for_up_bound': 'k_for_up_bound_racmo'
+        }, inplace=True)
+
+    if "value" in exp_name:
+        d_calibration = d_calibration[['rgi_id',
+                                       'method',
+                                       'fa_racmo',
+                                       'racmo_low_bound',
+                                       'racmo_up_bound',
+                                       'k_for_racmo_value']]
+
+        d_calibration.rename(columns={
+            'method': 'method_racmo'
+        }, inplace=True)
+
+    df_merge = pd.merge(left=oggm_stats,
+                        right=d_calibration,
+                        how='inner',
+                        left_on = 'rgi_id',
+                        right_on='rgi_id')
+
+    return df_merge

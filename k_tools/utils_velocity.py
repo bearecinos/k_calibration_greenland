@@ -97,6 +97,35 @@ def crop_vel_data_to_flowline(vel, error, shp):
     return ds_fls, dr_fls
 
 
+def crop_vel_data_to_flowline_width(vel, error, shp, last_one_third=False):
+    """
+    Crop velocity data and uncertainty to the glacier flowlines
+    :param
+        vel: xarray data containing vel or vel errors from
+             the whole Greenland
+        error: xarray data containing the errors from
+               the whole Greenland
+        shp: Shape file containing the glacier flowlines catchment widths
+    :return
+        ds_width: an array of velocity croped to the glacier catchment widths
+            of the main flowline .
+        dr_width: an array of velocity erros
+            croped to the glacier catchment widths of the main flowline .
+    """
+
+    # Crop to main flowline and catchment
+    shp_main = shp.loc[shp.MAIN == 1]
+
+    if last_one_third is True:
+        shp_main_end = shp_main.iloc[-np.int(len(shp_main) / 3):]
+        shp_main = shp_main_end
+
+    ds_width = vel.salem.roi(shape=shp_main)
+    dr_width = error.salem.roi(shape=shp_main)
+
+    return ds_width, dr_width
+
+
 def calculate_observation_vel(gdir, ds_fls, dr_fls):
     """
     Calculates the mean velocity and error at the end of the flowline
@@ -455,3 +484,107 @@ def find_k_values_within_vel_range(df_oggm, df_vel):
     out['up_lim_vel'].append(up_lim)
 
     return out
+
+
+def merge_vel_calibration_results_with_glac_stats(calibration_path,
+                                                  glac_stats_path,
+                                                  exp_name):
+    """
+
+    :param calibration_path: path to velocity calibration results csv file
+        from performing a linear fits to the input data and model output.
+    :param glac_stats_path: path to OGGM glacier stats csv file after running
+    the model with a specific k configuration and vel data.
+    (e.g itslive lowbound, value and upbound)
+    :param exp_name: name in str of the k configuration
+    :return: dataframe merged
+    """
+
+    # Read OGGM stats output
+    oggm_stats = pd.read_csv(glac_stats_path)
+
+    # Read calibration output and crop the file to the right k configuration
+    d_calibration = pd.read_csv(calibration_path, index_col='Unnamed: 0')
+    d_calibration.rename(columns={'RGIId': 'rgi_id'}, inplace=True)
+
+    if "lowbound" in exp_name:
+        d_calibration = d_calibration[['rgi_id',
+                                       'method',
+                                       'surface_vel_obs',
+                                       'obs_low_bound',
+                                       'obs_up_bound',
+                                       'k_for_lw_bound']]
+        if "itslive" in exp_name:
+            d_calibration.rename(columns={
+                                'method': 'method_itslive',
+                                'surface_vel_obs': 'surface_vel_obs_itslive',
+                                'obs_low_bound': 'obs_low_bound_itslive',
+                                'obs_up_bound': 'obs_up_bound_itslive',
+                                'k_for_lw_bound': 'k_for_lw_bound_itslive'
+            }, inplace=True)
+        elif "measures" in exp_name:
+            d_calibration.rename(columns={
+                                'method': 'method_measures',
+                                'surface_vel_obs': 'surface_vel_obs_measures',
+                                'obs_low_bound': 'obs_low_bound_measures',
+                                'obs_up_bound': 'obs_up_bound_measures',
+                                'k_for_lw_bound': 'k_for_lw_bound_measures'
+            }, inplace=True)
+
+    if "upbound" in exp_name:
+        d_calibration = d_calibration[['rgi_id',
+                                       'method',
+                                       'surface_vel_obs',
+                                       'obs_low_bound',
+                                       'obs_up_bound',
+                                       'k_for_up_bound']]
+
+        if "itslive" in exp_name:
+            d_calibration.rename(columns={
+                                'method': 'method_itslive',
+                                'surface_vel_obs': 'surface_vel_obs_itslive',
+                                'obs_low_bound': 'obs_low_bound_itslive',
+                                'obs_up_bound': 'obs_up_bound_itslive',
+                                'k_for_up_bound': 'k_for_up_bound_itslive'
+            }, inplace=True)
+        elif "measures" in exp_name:
+            d_calibration.rename(columns={
+                                'method': 'method_measures',
+                                'surface_vel_obs': 'surface_vel_obs_measures',
+                                'obs_low_bound': 'obs_low_bound_measures',
+                                'obs_up_bound': 'obs_up_bound_measures',
+                                'k_for_up_bound': 'k_for_up_bound_measures'
+            }, inplace=True)
+
+    if "value" in exp_name:
+        d_calibration = d_calibration[['rgi_id',
+                                       'method',
+                                       'surface_vel_obs',
+                                       'obs_low_bound',
+                                       'obs_up_bound',
+                                       'k_for_obs_value']]
+
+        if "itslive" in exp_name:
+            d_calibration.rename(columns={
+                                'method': 'method_itslive',
+                                'surface_vel_obs': 'surface_vel_obs_itslive',
+                                'obs_low_bound': 'obs_low_bound_itslive',
+                                'obs_up_bound': 'obs_up_bound_itslive',
+                                'k_for_obs_value': 'k_for_obs_value_itslive',
+            }, inplace=True)
+        elif "measures" in exp_name:
+            d_calibration.rename(columns={
+                                'method': 'method_measures',
+                                'surface_vel_obs': 'surface_vel_obs_measures',
+                                'obs_low_bound': 'obs_low_bound_measures',
+                                'obs_up_bound': 'obs_up_bound_measures',
+                                'k_for_obs_value': 'k_for_obs_value_measures'
+            }, inplace=True)
+
+    df_merge = pd.merge(left=oggm_stats,
+                        right=d_calibration,
+                        how='inner',
+                        left_on = 'rgi_id',
+                        right_on='rgi_id')
+
+    return df_merge
