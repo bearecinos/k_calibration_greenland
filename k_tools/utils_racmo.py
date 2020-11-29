@@ -421,6 +421,9 @@ def find_k_values_within_racmo_range(df_oggm, df_racmo):
     error_racmo = df_racmo.q_calving_RACMO_mean_std.values
     r_tol = error_racmo / fa_racmo
 
+    if r_tol < 0.1:
+        r_tol = 0.1
+
     first_oggm_value = df_oggm.iloc[0].calving_flux
     last_oggm_value = df_oggm.iloc[-1].calving_flux
 
