@@ -185,10 +185,15 @@ for gdir in gdirs:
     sel = dc[dc.index == gdir.rgi_id]
     k_value = sel.k_for_obs_value.values
 
+    cfg.PARAMS['continue_on_error'] = False
     cfg.PARAMS['k_calving'] = float(k_value)
     out = inversion.find_inversion_calving(gdir)
     if out is None:
-        continue
+        cfg.PARAMS['inversion_fs'] = 0.0
+        out = inversion.find_inversion_calving(gdir)
+        cfg.PARAMS['inversion_fs'] = 5.7e-20
+        if out is None:
+            continue
 
 # Compile output
 file_suffix_two = 'calving_k_measures_obs_value'
